@@ -966,6 +966,21 @@ class ModelScanner:
         else:
             preview_url = ''
 
+        # Metadata sidecars can survive a library move and still contain an
+        # absolute preview path from the previous installation. The scanner
+        # already knows the model's current business path, so prefer a
+        # colocated preview when the stored path is missing. This also heals
+        # entries whose sidecar has no preview_url but whose preview file was
+        # copied together with the model.
+        if normalized_path and (not preview_url or not os.path.isfile(preview_url)):
+            model_stem = os.path.splitext(os.path.basename(normalized_path))[0]
+            current_preview = find_preview_file(
+                model_stem,
+                get_preview_dir(normalized_path),
+            )
+            if current_preview:
+                preview_url = current_preview
+
         civitai_full = get_value('civitai')
         civitai_slim = self._slim_civitai_payload(civitai_full)
         usage_tips = get_value('usage_tips', '') or ''
