@@ -34,6 +34,26 @@
     padding: 1px;
 }
 
+.version-multi-select-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--border-radius-xs);
+    background: oklch(var(--lora-accent) / 0.1);
+    color: var(--lora-accent);
+    font-size: 0.9em;
+}
+
+.version-select-checkbox {
+    width: 18px;
+    height: 18px;
+    margin: auto 0;
+    flex-shrink: 0;
+    accent-color: var(--lora-accent);
+    pointer-events: none;
+}
+
 .version-item {
     display: flex;
     gap: var(--space-2);
@@ -895,6 +915,12 @@
 .batch-preview-local-badge {
     color: var(--lora-accent);
     opacity: 1;
+}
+
+.batch-preview-version-count {
+    color: var(--lora-accent);
+    opacity: 1;
+    font-weight: 600;
 }
 
 .batch-preview-local {

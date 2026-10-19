@@ -1730,6 +1730,10 @@
       "downloadedTooltip": "Previously downloaded, but it is not currently in your library.",
       "alreadyInLibrary": "Already in Library",
       "partiallyDownloaded": "Partially downloaded",
+      "selectMultipleVersions": "Select one or more versions to download",
+      "selectVersion": "Select version {name}",
+      "confirmVersionSelection": "Confirm ({count})",
+      "versionsSelected": "{count} version(s) selected",
       "autoOrganizedPath": "[Auto-organized by path template]",
       "fileSelection": {
         "title": "Select File Format",

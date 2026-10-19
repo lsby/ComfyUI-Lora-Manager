@@ -1730,6 +1730,10 @@
             "downloadedTooltip": "先前已下載，但目前不在您的庫中。",
             "alreadyInLibrary": "已在庫存",
             "partiallyDownloaded": "部分已下載",
+            "selectMultipleVersions": "選擇一個或多個要下載的版本",
+            "selectVersion": "選擇版本 {name}",
+            "confirmVersionSelection": "確認（{count}）",
+            "versionsSelected": "已選擇 {count} 個版本",
             "autoOrganizedPath": "[依路徑範本自動整理]",
             "fileSelection": {
                 "title": "選擇檔案格式",

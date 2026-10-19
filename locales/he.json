@@ -1730,6 +1730,10 @@
             "downloadedTooltip": "הורד בעבר, אך הוא אינו נמצא כרגע בספרייה שלך.",
             "alreadyInLibrary": "כבר בספרייה",
             "partiallyDownloaded": "הורד חלקית",
+            "selectMultipleVersions": "[TODO: Translate] Select one or more versions to download",
+            "selectVersion": "[TODO: Translate] Select version {name}",
+            "confirmVersionSelection": "[TODO: Translate] Confirm ({count})",
+            "versionsSelected": "[TODO: Translate] {count} version(s) selected",
             "autoOrganizedPath": "[מאורגן אוטומטית לפי תבנית נתיב]",
             "fileSelection": {
                 "title": "בחר פורמט קובץ",

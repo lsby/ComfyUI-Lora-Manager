@@ -1730,6 +1730,10 @@
             "downloadedTooltip": "Zuvor heruntergeladen, aber derzeit nicht in Ihrer Bibliothek.",
             "alreadyInLibrary": "Bereits in Bibliothek",
             "partiallyDownloaded": "Teilweise heruntergeladen",
+            "selectMultipleVersions": "[TODO: Translate] Select one or more versions to download",
+            "selectVersion": "[TODO: Translate] Select version {name}",
+            "confirmVersionSelection": "[TODO: Translate] Confirm ({count})",
+            "versionsSelected": "[TODO: Translate] {count} version(s) selected",
             "autoOrganizedPath": "[Automatisch organisiert durch Pfadvorlage]",
             "fileSelection": {
                 "title": "Dateiformat auswählen",

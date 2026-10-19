@@ -1730,6 +1730,10 @@
             "downloadedTooltip": "以前にダウンロード済みですが、現在はライブラリにありません。",
             "alreadyInLibrary": "既にライブラリ内",
             "partiallyDownloaded": "一部ダウンロード済み",
+            "selectMultipleVersions": "[TODO: Translate] Select one or more versions to download",
+            "selectVersion": "[TODO: Translate] Select version {name}",
+            "confirmVersionSelection": "[TODO: Translate] Confirm ({count})",
+            "versionsSelected": "[TODO: Translate] {count} version(s) selected",
             "autoOrganizedPath": "[パステンプレートによる自動整理]",
             "fileSelection": {
                 "title": "ファイル形式を選択",

@@ -54,6 +54,7 @@ export class DownloadManager {
         this.batchModels = [];
         this.isBatchMode = false;
         this.editingBatchIndex = -1;
+        this.editingSelectedVersions = [];
 
         // External repository download state (Hugging Face / ModelScope)
         this.sourcePlatform = 'huggingface';
@@ -200,6 +201,7 @@ export class DownloadManager {
         this.batchModels = [];
         this.isBatchMode = false;
         this.editingBatchIndex = -1;
+        this.editingSelectedVersions = [];
 
         // Clear folder tree selection
         if (this.folderTreeManager) {
@@ -324,7 +326,12 @@ export class DownloadManager {
 
         const fetchPromises = parsed.map(async (item, index) => {
             if (item.error) {
-                this.batchModels[index] = { ...item, versions: [], selectedVersion: null };
+                this.batchModels[index] = {
+                    ...item,
+                    versions: [],
+                    selectedVersion: null,
+                    selectedVersions: [],
+                };
                 return;
             }
             try {
@@ -341,9 +348,20 @@ export class DownloadManager {
                     }
                 }
 
-                this.batchModels[index] = { ...item, versions: versions || [], selectedVersion };
+                this.batchModels[index] = {
+                    ...item,
+                    versions: versions || [],
+                    selectedVersion,
+                    selectedVersions: selectedVersion ? [selectedVersion] : [],
+                };
             } catch (err) {
-                this.batchModels[index] = { ...item, versions: [], selectedVersion: null, error: err.message };
+                this.batchModels[index] = {
+                    ...item,
+                    versions: [],
+                    selectedVersion: null,
+                    selectedVersions: [],
+                    error: err.message,
+                };
             }
         });
 
@@ -654,7 +672,21 @@ export class DownloadManager {
         const newList = versionList.cloneNode(false);
         versionList.parentNode.replaceChild(newList, versionList);
 
-        newList.innerHTML = this.versions.map(version => {
+        const isBatchEditing = this.isBatchMode && this.editingBatchIndex >= 0;
+        const selectedVersionIds = new Set(
+            (isBatchEditing ? this.editingSelectedVersions : [this.currentVersion])
+                .filter(Boolean)
+                .map(version => String(version.id))
+        );
+
+        const selectionHint = isBatchEditing
+            ? `<div class="version-multi-select-hint">
+                 <i class="fas fa-check-square"></i>
+                 ${translate('modals.download.selectMultipleVersions', {}, 'Select one or more versions to download')}
+               </div>`
+            : '';
+
+        newList.innerHTML = selectionHint + this.versions.map(version => {
             const firstImage = version.images?.find(img => !img.url.endsWith('.mp4'));
             const thumbnailUrl = firstImage ? firstImage.url : '/loras_static/images/no-preview.png';
 
@@ -698,17 +730,25 @@ export class DownloadManager {
             // Always offer the file-selection entry for multi-file versions,
             // even when the version is already (partially) in the library, so
             // remaining files can still be downloaded (#1058).
-            const fileBadge = modelFiles.length > 1
+            const fileBadge = modelFiles.length > 1 && !isBatchEditing
                 ? `<span class="file-select-badge" data-version-id="${version.id}">
                      <i class="fas fa-th-list"></i> ${modelFiles.length} ${translate('modals.download.fileSelection.files')} <i class="fas fa-chevron-right badge-arrow"></i>
                    </span>`
                 : '';
 
+            const isSelected = selectedVersionIds.has(String(version.id));
+            const multiSelectControl = isBatchEditing
+                ? `<input type="checkbox" class="version-select-checkbox"
+                          aria-label="${translate('modals.download.selectVersion', { name: version.name }, 'Select version ' + version.name)}"
+                          ${isSelected ? 'checked' : ''}>`
+                : '';
+
             return `
-                <div class="version-item ${this.currentVersion?.id === version.id ? 'selected' : ''} 
+                <div class="version-item ${isSelected ? 'selected' : ''}
                      ${existsLocally ? 'exists-locally' : ''} 
                      ${isEarlyAccess ? 'is-early-access' : ''}"
                      data-version-id="${version.id}">
+                    ${multiSelectControl}
                     <div class="version-thumbnail">
                         <img src="${thumbnailUrl}" alt="${translate('modals.download.versionPreview')}">
                     </div>
@@ -743,7 +783,11 @@ export class DownloadManager {
             }
             const versionItem = event.target.closest('.version-item');
             if (versionItem) {
-                this.selectVersion(versionItem.dataset.versionId);
+                if (isBatchEditing) {
+                    this.toggleBatchVersion(versionItem.dataset.versionId);
+                } else {
+                    this.selectVersion(versionItem.dataset.versionId);
+                }
             }
         });
 
@@ -766,9 +810,49 @@ export class DownloadManager {
         this.updateNextButtonState();
     }
 
+    toggleBatchVersion(versionId) {
+        const version = this.versions.find(v => String(v.id) === String(versionId));
+        if (!version) return;
+
+        const selectedIndex = this.editingSelectedVersions.findIndex(
+            selected => String(selected.id) === String(version.id)
+        );
+        if (selectedIndex >= 0) {
+            this.editingSelectedVersions.splice(selectedIndex, 1);
+        } else {
+            this.editingSelectedVersions.push(version);
+        }
+        this.currentVersion = this.editingSelectedVersions[0] || null;
+
+        document.querySelectorAll('.version-item').forEach(item => {
+            const isSelected = this.editingSelectedVersions.some(
+                selected => String(selected.id) === String(item.dataset.versionId)
+            );
+            item.classList.toggle('selected', isSelected);
+            const checkbox = item.querySelector('.version-select-checkbox');
+            if (checkbox) checkbox.checked = isSelected;
+        });
+
+        this.updateNextButtonState();
+    }
+
     updateNextButtonState() {
         const nextButton = document.getElementById('nextFromVersion');
         if (!nextButton) return;
+
+        if (this.isBatchMode && this.editingBatchIndex >= 0) {
+            const selectedCount = this.editingSelectedVersions.length;
+            nextButton.disabled = selectedCount === 0;
+            nextButton.classList.toggle('disabled', selectedCount === 0);
+            nextButton.textContent = selectedCount > 0
+                ? translate(
+                    'modals.download.confirmVersionSelection',
+                    { count: selectedCount },
+                    `Confirm (${selectedCount})`
+                )
+                : translate('common.actions.confirm', {}, 'Confirm');
+            return;
+        }
 
         const version = this.currentVersion;
         const existsLocally = version?.existsLocally;
@@ -951,10 +1035,11 @@ export class DownloadManager {
     async proceedToLocation() {
         // If editing a batch item's version, save and return to batch preview
         if (this.isBatchMode && this.editingBatchIndex >= 0) {
-            if (this.currentVersion) {
-                this.batchModels[this.editingBatchIndex].selectedVersion = this.currentVersion;
-            }
+            const item = this.batchModels[this.editingBatchIndex];
+            item.selectedVersions = [...this.editingSelectedVersions];
+            item.selectedVersion = item.selectedVersions[0] || null;
             this.editingBatchIndex = -1;
+            this.editingSelectedVersions = [];
             document.getElementById('versionStep').style.display = 'none';
             this.showBatchPreviewStep();
             return;
@@ -1709,16 +1794,25 @@ export class DownloadManager {
             await resetAndReload(true);
             return;
         }
-        const seen = new Set();
+        const models = new Map();
         for (const item of completedCivitaiItems) {
             const modelId = item?.modelId;
-            if (modelId == null || seen.has(String(modelId))) {
-                continue;
-            }
-            seen.add(String(modelId));
-            await this._reconcileViewAfterDownload({
+            if (modelId == null) continue;
+            const key = String(modelId);
+            const isLatestVersion = this._isVersionLatest(
+                item.selectedVersion?.id,
+                item.versions
+            );
+            const existing = models.get(key);
+            models.set(key, {
                 modelId,
-                isLatestVersion: this._isVersionLatest(item.selectedVersion?.id, item.versions),
+                isLatestVersion: Boolean(existing?.isLatestVersion || isLatestVersion),
+            });
+        }
+        for (const item of models.values()) {
+            await this._reconcileViewAfterDownload({
+                modelId: item.modelId,
+                isLatestVersion: item.isLatestVersion,
                 refreshSidebar: false,
             });
         }
@@ -2042,15 +2136,29 @@ export class DownloadManager {
         this.updateTargetPath();
     }
 
+    _getBatchSelectedVersions(item) {
+        if (!item || item.error || isExternalModelSource(item.source)) return [];
+        if (Array.isArray(item.selectedVersions)) {
+            return item.selectedVersions.filter(Boolean);
+        }
+        return item.selectedVersion ? [item.selectedVersion] : [];
+    }
+
+    _getBatchSelectionCount() {
+        return this.batchModels.reduce((count, item) => {
+            if (item.error) return count;
+            if (isExternalModelSource(item.source)) {
+                return count + (item.checked !== false ? 1 : 0);
+            }
+            return count + this._getBatchSelectedVersions(item).length;
+        }, 0);
+    }
+
     showBatchPreviewStep() {
         document.querySelectorAll('.download-step').forEach(step => step.style.display = 'none');
         document.getElementById('batchPreviewStep').style.display = 'flex';
 
-        const validCount = this.batchModels.filter(m => {
-            if (m.error) return false;
-            if (isExternalModelSource(m.source)) return m.checked !== false;
-            return m.selectedVersion;
-        }).length;
+        const validCount = this._getBatchSelectionCount();
         document.getElementById('downloadModalTitle').textContent =
             translate('modals.download.titleWithType', { type: this.apiClient.apiConfig.config.displayName }) +
             ` (${validCount})`;
@@ -2083,7 +2191,9 @@ export class DownloadManager {
         const civitaiItemsHtml = this.batchModels.map((item, index) => {
             if (item.error) return null;
             if (isExternalModelSource(item.source)) return null;
-            const ver = item.selectedVersion;
+            const selectedVersions = this._getBatchSelectedVersions(item);
+            const ver = selectedVersions[0] || null;
+            const selectedCount = selectedVersions.length;
             const firstImage = ver?.images?.find(img => !img.url.endsWith('.mp4'));
             const thumbnailUrl = firstImage ? firstImage.url : '/loras_static/images/no-preview.png';
             const fileSize = ver?.modelSizeKB
@@ -2108,6 +2218,13 @@ export class DownloadManager {
                         <div class="batch-preview-meta">
                             ${ver?.baseModel ? `<span>${ver.baseModel}</span>` : ''}
                             <span>${fileSize} MB</span>
+                            <span class="batch-preview-version-count">
+                                ${translate(
+                                    'modals.download.versionsSelected',
+                                    { count: selectedCount },
+                                    `${selectedCount} version(s) selected`
+                                )}
+                            </span>
                             ${existsLocally ? `<span class="batch-preview-local-badge"><i class="fas fa-check"></i> ${localBadgeLabel}</span>` : ''}
                         </div>
                     </div>
@@ -2192,9 +2309,7 @@ export class DownloadManager {
         list.innerHTML = itemsHtml;
 
         const updateCountAndSelectAll = () => {
-            const checkedCount = this.batchModels.filter(
-                m => !m.error && m.checked !== false
-            ).length;
+            const checkedCount = this._getBatchSelectionCount();
             document.getElementById('downloadModalTitle').textContent =
                 translate('modals.download.titleWithType', { type: this.apiClient.apiConfig.config.displayName }) +
                 ` (${checkedCount})`;
@@ -2333,7 +2448,8 @@ export class DownloadManager {
         const item = this.batchModels[index];
 
         this.versions = item.versions;
-        this.currentVersion = item.selectedVersion;
+        this.editingSelectedVersions = [...this._getBatchSelectedVersions(item)];
+        this.currentVersion = this.editingSelectedVersions[0] || null;
 
         document.getElementById('batchPreviewStep').style.display = 'none';
         this.showVersionStep();
@@ -2345,13 +2461,7 @@ export class DownloadManager {
     }
 
     nextFromBatch() {
-        // For HF items, respect the checked flag; for CivitAI items, use selectedVersion
-        const validModels = this.batchModels.filter(m => {
-            if (m.error) return false;
-            if (isExternalModelSource(m.source)) return m.checked !== false;
-            return m.selectedVersion;
-        });
-        if (validModels.length === 0) return;
+        if (this._getBatchSelectionCount() === 0) return;
         this.proceedToLocation();
     }
 
@@ -2359,6 +2469,7 @@ export class DownloadManager {
         document.getElementById('versionStep').style.display = 'none';
         if (this.isBatchMode && this.editingBatchIndex >= 0) {
             this.editingBatchIndex = -1;
+            this.editingSelectedVersions = [];
             this.showBatchPreviewStep();
         } else {
             document.getElementById('urlStep').style.display = 'block';
@@ -2453,12 +2564,22 @@ export class DownloadManager {
         }
 
         // Batch download mode
-        const downloadItems = this.batchModels.filter(m => {
-            if (m.error) return false;
-            if (!m.selectedVersion) return false;
-            // HF items have selectedVersion as a boolean marker + checked flag
-            if (isExternalModelSource(m.source)) return m.checked !== false;
-            return !m.selectedVersion.existsLocally;
+        const downloadItems = this.batchModels.flatMap(item => {
+            if (item.error) return [];
+            // External-source entries are already one file per batch item.
+            if (isExternalModelSource(item.source)) {
+                return item.checked !== false ? [item] : [];
+            }
+            // CivitAI entries expand one model row into one download job per
+            // selected version. Keep selectedVersion on each job for the
+            // existing progress, retry and reconciliation code paths.
+            return this._getBatchSelectedVersions(item)
+                .filter(version => !version.existsLocally)
+                .map(version => ({
+                    ...item,
+                    selectedVersion: version,
+                    selectedVersions: [version],
+                }));
         });
         if (downloadItems.length === 0) {
             showToast('toast.loras.downloadCompleted', {}, 'info');
