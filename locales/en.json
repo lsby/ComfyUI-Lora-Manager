@@ -843,6 +843,13 @@
     "metadataArchive": {
       "enableArchiveDb": "Enable Metadata Archive Database",
       "enableArchiveDbHelp": "Use a local database to access metadata for models that have been deleted from CivitAI.",
+      "modelArchiveEnabled": "Archive downloaded model metadata",
+      "modelArchiveEnabledHelp": "Keep append-only API snapshots, descriptions, previews, and available example media in centralized storage. Full cache rebuilds repair archives for existing models.",
+      "modelArchiveDownloadMedia": "Archive all remote example media",
+      "modelArchiveDownloadMediaHelp": "Download the example images and videos listed in model metadata while the source is still available. Failed files are retried on a later download or metadata refresh.",
+      "modelArchivePath": "Model archive location",
+      "modelArchivePathHelp": "Central directory for durable model snapshots. Leave empty to use <settings dir>/model-archives.",
+      "modelArchivePathPlaceholder": "Empty = <settings dir>/model-archives",
       "status": "Status",
       "statusAvailable": "Available",
       "statusUnavailable": "Not Available",

@@ -79,6 +79,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "onboarding_completed": False,
     "dismissed_banners": [],
     "enable_metadata_archive_db": False,
+    # User-owned source snapshots, separate from the shared recovery database.
+    "model_archive_enabled": False,
+    "model_archive_path": "",
+    "model_archive_download_media": True,
     "enable_civarchive_api": True,
     # OpenModelDB supplies read-only metadata for upscaler models (the "other"
     # page's upscaler sub_type) via hash matching against its bulk catalogue.
@@ -2014,6 +2018,8 @@ class SettingsManager:
             value = self._normalize_unknown_base_model_routing(value)
         elif key == "sidecar_storage_path":
             value = self._normalize_recipes_path_value(value)
+        elif key == "model_archive_path":
+            value = self._normalize_recipes_path_value(value)
         self.settings[key] = value
         portable_switch_pending = False
         if key == "use_portable_settings" and isinstance(value, bool):
@@ -2168,6 +2174,7 @@ class SettingsManager:
         _copy_dir("logs")
         _copy_dir("stats")
         _copy_dir("wildcards")
+        _copy_dir("model-archives")
 
     def _get_user_config_directory(self) -> str:
         """Return the user configuration directory, falling back to ~/.config."""

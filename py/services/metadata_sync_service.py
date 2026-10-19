@@ -16,6 +16,7 @@ from ..utils.sidecar_paths import get_metadata_path
 from .connectivity_guard import OFFLINE_FRIENDLY_MESSAGE, is_expected_offline_error
 from .errors import MetadataPersistError, RateLimitError
 from .model_metadata_provider import _LOCAL_PROVIDER_LABELS
+from .model_archive_service import get_model_archive_service
 from .model_sources import get_source, get_source_platform, has_external_source, hydrate_from_source
 from .model_sources.hydration import shared_source_cache
 
@@ -533,6 +534,12 @@ class MetadataSyncService:
                 local_metadata,
                 civitai_metadata,
                 metadata_provider,
+            )
+
+            await get_model_archive_service().archive_model(
+                file_path,
+                local_metadata,
+                download_remote_media=True,
             )
 
             update_payload = {

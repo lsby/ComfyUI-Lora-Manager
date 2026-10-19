@@ -1726,6 +1726,19 @@ class ModelScanner:
                 await self._initialize_cache()
             else:
                 self._last_reconcile_summary = await self._reconcile_cache(scope=scope)
+                try:
+                    from .model_archive_service import get_model_archive_service
+
+                    if self._cache is not None:
+                        await get_model_archive_service().archive_existing(
+                            self._cache.raw_data
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "%s Scanner: Model archive refresh repair failed: %s",
+                        self.model_type.capitalize(),
+                        exc,
+                    )
         
         return cast(ModelCache, self._cache)
 
@@ -1888,6 +1901,19 @@ class ModelScanner:
                 await self._apply_scan_result(scan_result)
                 await self._save_persistent_cache(scan_result)
                 await self._sync_download_history(scan_result.raw_data, source='scan')
+                # Full rebuilds also repair archives for pre-existing models.
+                # This pass is local-only and never expands a cache rebuild
+                # into a large network download.
+                try:
+                    from .model_archive_service import get_model_archive_service
+
+                    await get_model_archive_service().archive_existing(scan_result.raw_data)
+                except Exception as exc:
+                    logger.warning(
+                        "%s Scanner: Model archive repair failed: %s",
+                        self.model_type.capitalize(),
+                        exc,
+                    )
                 await self._broadcast_scan_progress(
                     'completed', 'finalizing', 100, True,
                     elapsed_seconds=time.time() - start_time,

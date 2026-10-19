@@ -843,6 +843,13 @@
         "metadataArchive": {
             "enableArchiveDb": "메타데이터 아카이브 데이터베이스 활성화",
             "enableArchiveDbHelp": "CivitAI에서 삭제된 모델의 메타데이터에 접근하기 위해 로컬 데이터베이스를 사용합니다.",
+            "modelArchiveEnabled": "[TODO: Translate] Archive downloaded model metadata",
+            "modelArchiveEnabledHelp": "[TODO: Translate] Keep append-only API snapshots, descriptions, previews, and available example media in centralized storage. Full cache rebuilds repair archives for existing models.",
+            "modelArchiveDownloadMedia": "[TODO: Translate] Archive all remote example media",
+            "modelArchiveDownloadMediaHelp": "[TODO: Translate] Download the example images and videos listed in model metadata while the source is still available. Failed files are retried on a later download or metadata refresh.",
+            "modelArchivePath": "[TODO: Translate] Model archive location",
+            "modelArchivePathHelp": "[TODO: Translate] Central directory for durable model snapshots. Leave empty to use <settings dir>/model-archives.",
+            "modelArchivePathPlaceholder": "[TODO: Translate] Empty = <settings dir>/model-archives",
             "status": "상태",
             "statusAvailable": "사용 가능",
             "statusUnavailable": "사용 불가",

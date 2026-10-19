@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Protocol, Sequence
 from ..metadata_sync_service import MetadataSyncService
 from ..model_scanner import _normalized_root_prefix, _path_matches_prefix
 from ..model_sources import has_external_source
+from ..model_archive_service import get_model_archive_service
 from ...utils.metadata_manager import MetadataManager
 
 
@@ -259,6 +260,14 @@ class BulkMetadataRefreshUseCase:
 
         if needs_resort:
             await cache.resort()
+
+        # Models with complete CivitAI metadata are intentionally skipped by
+        # the fetch queue above. Still use their saved image URLs to repair the
+        # durable local archive when the user explicitly requests metadata.
+        await get_model_archive_service().archive_existing(
+            cache.raw_data,
+            download_remote_media=True,
+        )
 
         await emit("completed", processed=processed, success=success)
 

@@ -843,6 +843,13 @@
         "metadataArchive": {
             "enableArchiveDb": "Включить архив метаданных",
             "enableArchiveDbHelp": "Использовать локальную базу данных для доступа к метаданным моделей, удалённых с CivitAI.",
+            "modelArchiveEnabled": "[TODO: Translate] Archive downloaded model metadata",
+            "modelArchiveEnabledHelp": "[TODO: Translate] Keep append-only API snapshots, descriptions, previews, and available example media in centralized storage. Full cache rebuilds repair archives for existing models.",
+            "modelArchiveDownloadMedia": "[TODO: Translate] Archive all remote example media",
+            "modelArchiveDownloadMediaHelp": "[TODO: Translate] Download the example images and videos listed in model metadata while the source is still available. Failed files are retried on a later download or metadata refresh.",
+            "modelArchivePath": "[TODO: Translate] Model archive location",
+            "modelArchivePathHelp": "[TODO: Translate] Central directory for durable model snapshots. Leave empty to use <settings dir>/model-archives.",
+            "modelArchivePathPlaceholder": "[TODO: Translate] Empty = <settings dir>/model-archives",
             "status": "Статус",
             "statusAvailable": "Доступно",
             "statusUnavailable": "Недоступно",

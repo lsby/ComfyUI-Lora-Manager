@@ -327,6 +327,13 @@
         <!-- Metadata Archive DB -->
         {{ sm.setting_toggle('enableMetadataArchive', 'enable_metadata_archive_db', 'settings.metadataArchive.enableArchiveDb', 'settings.metadataArchive.enableArchiveDbHelp') }}
 
+        <!-- User-owned model snapshots -->
+        {{ sm.setting_toggle('modelArchiveEnabled', 'model_archive_enabled', 'settings.metadataArchive.modelArchiveEnabled', 'settings.metadataArchive.modelArchiveEnabledHelp') }}
+
+        {{ sm.setting_toggle('modelArchiveDownloadMedia', 'model_archive_download_media', 'settings.metadataArchive.modelArchiveDownloadMedia', 'settings.metadataArchive.modelArchiveDownloadMediaHelp') }}
+
+        {{ sm.setting_input('modelArchivePath', 'model_archive_path', 'settings.metadataArchive.modelArchivePath', 'settings.metadataArchive.modelArchivePathPlaceholder', 'settings.metadataArchive.modelArchivePathHelp') }}
+
         <div class="setting-item">
             <div class="metadata-archive-status" id="metadataArchiveStatus">
                 <!-- Status will be populated by JavaScript -->

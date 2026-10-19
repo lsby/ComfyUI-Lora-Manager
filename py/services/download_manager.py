@@ -61,6 +61,7 @@ from .aria2_downloader import Aria2Error, get_aria2_downloader
 from .aria2_transfer_state import Aria2TransferStateStore
 from .download_queue_service import DownloadQueueService
 from .model_lifecycle_service import ModelLifecycleService, load_local_metadata
+from .model_archive_service import get_model_archive_service
 
 # Download to temporary file first
 import tempfile
@@ -3079,6 +3080,24 @@ class DownloadManager:
                 metadata_files_for_cleanup.append(metadata_file_path)
 
                 await MetadataManager.save_metadata(entry.file_path, entry)
+
+                archive_service = get_model_archive_service()
+                archive_payload = entry.to_dict()
+                await archive_service.archive_model(
+                    entry.file_path,
+                    archive_payload,
+                    download_remote_media=False,
+                )
+                # Preserve download completion latency: the durable snapshot
+                # and local preview are already on disk, while remote gallery
+                # media continues in the background and remains retryable.
+                asyncio.create_task(
+                    archive_service.archive_model(
+                        entry.file_path,
+                        archive_payload,
+                        download_remote_media=True,
+                    )
+                )
 
                 metadata_dict = entry.to_dict()
                 if callable(adjust_cached_entry):
