@@ -778,7 +778,7 @@ export class BaseModelApiClient {
         }
     }
 
-    async fetchCivitaiMetadata() {
+    async fetchCivitaiMetadata({ scope = 'all', force = false, filePaths = null } = {}) {
         let ws = null;
 
         await state.loadingManager.showWithProgress(async (loading) => {
@@ -805,7 +805,7 @@ export class BaseModelApiClient {
                         switch (data.status) {
                             case 'started':
                                 loading.setProgress(0);
-                                loading.setStatus(`Metadata: ${data.fetch_total || 0} models need fetching | ⏭️ ${data.skipped_count || 0} already complete/skipped`);
+                                loading.setStatus(`Metadata: ${data.fetch_total || 0} models queued | ⏭️ ${data.skipped_count || 0} skipped`);
                                 break;
 
                             case 'model_started': {
@@ -815,6 +815,10 @@ export class BaseModelApiClient {
                                 loading.setProgress(percent);
                                 let statusText = `Metadata (${fetchIndex}/${fetchTotal}) fetching ${data.current_name || ''}`;
                                 statusText += ` | ✅ ${data.success || 0}`;
+                                statusText += ` | 🔄 ${data.updated_count || 0} updated`;
+                                if (data.invalid_count > 0) {
+                                    statusText += ` | ⚠️ ${data.invalid_count} invalid`;
+                                }
                                 if (data.failure_count > 0) {
                                     statusText += ` | ❌ ${data.failure_count} failed`;
                                 }
@@ -828,6 +832,10 @@ export class BaseModelApiClient {
                                 const percent = fetchTotal > 0 ? ((handled / fetchTotal) * 100).toFixed(1) : 100;
                                 loading.setProgress(percent);
                                 let statusText = `Metadata (${handled}/${fetchTotal}) completed ${data.current_name || ''} | ✅ ${data.success || 0}`;
+                                statusText += ` | 🔄 ${data.updated_count || 0} updated`;
+                                if (data.invalid_count > 0) {
+                                    statusText += ` | ⚠️ ${data.invalid_count} invalid`;
+                                }
                                 if (data.failure_count > 0) {
                                     statusText += ` | ❌ ${data.failure_count} failed`;
                                 }
@@ -866,7 +874,7 @@ export class BaseModelApiClient {
 
                             case 'completed': {
                                 loading.setProgress(100);
-                                let summaryText = `Completed: Updated ${data.success} of ${data.processed} ${this.apiConfig.config.displayName}s`;
+                                let summaryText = `Completed: ✅ ${data.success || 0} success | 🔄 ${data.updated_count || 0} updated | ⚠️ ${data.invalid_count || 0} invalid`;
                                 if (data.failure_count > 0) {
                                     summaryText += ` | ❌ ${data.failure_count} failed`;
                                 }
@@ -914,7 +922,11 @@ export class BaseModelApiClient {
                 const response = await fetch(this.apiConfig.endpoints.fetchAllCivitai, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
+                    body: JSON.stringify({
+                        scope,
+                        force,
+                        ...(scope === 'selected' ? { file_paths: filePaths || [] } : {}),
+                    })
                 });
 
                 if (!response.ok) {
@@ -949,23 +961,31 @@ export class BaseModelApiClient {
 
         if (data.status === 'cancelled') {
             showToast('toast.api.operationCancelledPartial', { success, total }, 'info');
-            return;
         }
 
         this._showFailureDetailsModal(data);
     }
 
     _showFailureDetailsModal(data) {
-        const { failures = [], success, processed, total, failure_count, skipped_count, elapsed_seconds, offline_skipped = 0, offline_roots = [] } = data;
+        const report = data.report || {};
+        const items = Array.isArray(report.items) ? report.items : [];
+        const success = report.successful ?? data.success ?? 0;
+        const updatedCount = report.updated ?? data.updated_count ?? 0;
+        const invalidCount = report.invalid ?? data.invalid_count ?? 0;
+        const failureCount = report.failed ?? data.failure_count ?? 0;
+        const skippedCount = report.skipped ?? data.skipped_count ?? 0;
+        const total = report.matched ?? data.total ?? data.processed ?? 0;
+        const elapsedSeconds = report.elapsed_seconds ?? data.elapsed_seconds ?? 0;
+        const { offline_skipped = 0, offline_roots = [] } = data;
 
         const offlineRootNames = offline_roots.map((root) => root.label || root.path || String(root)).join(', ');
 
-        // Build failure list HTML
-        const failureRows = failures.map((f, i) =>
+        const reportRows = items.map((item, i) =>
             `<tr>
                 <td class="failure-index">${i + 1}</td>
-                <td class="failure-name" title="${this._escapeHtml(f.name)}">${this._escapeHtml(f.name)}</td>
-                <td class="failure-error">${this._escapeHtml(f.error || 'Unknown')}</td>
+                <td class="failure-name" title="${this._escapeHtml(item.file_path || item.name)}">${this._escapeHtml(item.name || 'Unknown')}</td>
+                <td>${this._escapeHtml(item.status || 'unknown')}</td>
+                <td class="failure-error">${this._escapeHtml(item.detail || '')}</td>
             </tr>`
         ).join('');
 
@@ -983,16 +1003,28 @@ export class BaseModelApiClient {
                                 <span class="stat-card-value">${success}</span>
                             </div>
                         </div>
+                        <div class="stat-card stat-card-updated">
+                            <div class="stat-card-body">
+                                <span class="stat-card-label">${translate('modals.metadataFetchSummary.statUpdated', {}, 'Updated')}</span>
+                                <span class="stat-card-value">${updatedCount}</span>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-card-invalid">
+                            <div class="stat-card-body">
+                                <span class="stat-card-label">${translate('modals.metadataFetchSummary.statInvalid', {}, 'Invalid')}</span>
+                                <span class="stat-card-value">${invalidCount}</span>
+                            </div>
+                        </div>
                         <div class="stat-card stat-card-failure">
                             <div class="stat-card-body">
                                 <span class="stat-card-label">${translate('modals.metadataFetchSummary.statFailed', {}, 'Failed')}</span>
-                                <span class="stat-card-value">${failure_count}</span>
+                                <span class="stat-card-value">${failureCount}</span>
                             </div>
                         </div>
                         <div class="stat-card stat-card-skipped">
                             <div class="stat-card-body">
                                 <span class="stat-card-label">${translate('modals.metadataFetchSummary.statSkipped', {}, 'Skipped')}</span>
-                                <span class="stat-card-value">${skipped_count}</span>
+                                <span class="stat-card-value">${skippedCount}</span>
                             </div>
                         </div>
                         ${offline_skipped > 0 ? `
@@ -1005,45 +1037,45 @@ export class BaseModelApiClient {
                         <div class="stat-card stat-card-total">
                             <div class="stat-card-body">
                                 <span class="stat-card-label">${translate('modals.metadataFetchSummary.statTotal', {}, 'Total Scanned')}</span>
-                                <span class="stat-card-value">${total || processed}</span>
+                                <span class="stat-card-value">${total}</span>
                             </div>
                         </div>
                         <div class="stat-card stat-card-time">
                             <div class="stat-card-body">
                                 <span class="stat-card-label">${translate('modals.metadataFetchSummary.statDuration', {}, 'Duration')}</span>
-                                <span class="stat-card-value">${elapsed_seconds}s</span>
+                                <span class="stat-card-value">${elapsedSeconds}s</span>
                             </div>
                         </div>
                     </div>
 
-                    ${failure_count > 0 ? `
+                    ${items.length > 0 ? `
                     <div class="refresh-failures-section">
-                        <h4><i class="fas fa-exclamation-triangle"></i> ${translate('modals.metadataFetchSummary.failedItems', { count: failure_count }, 'Failed Items (' + failure_count + ')')}</h4>
+                        <h4><i class="fas fa-list"></i> ${translate('modals.metadataFetchSummary.reportItems', { count: items.length }, 'Report Items (' + items.length + ')')}</h4>
                         <div class="failure-table-wrapper">
                             <table class="failure-table">
                                 <thead>
                                     <tr>
                                         <th>#</th>
                                         <th>${translate('modals.metadataFetchSummary.columnModelName', {}, 'Model Name')}</th>
-                                        <th>${translate('modals.metadataFetchSummary.columnError', {}, 'Error')}</th>
+                                        <th>${translate('modals.metadataFetchSummary.columnStatus', {}, 'Status')}</th>
+                                        <th>${translate('modals.metadataFetchSummary.columnDetail', {}, 'Detail')}</th>
                                     </tr>
                                 </thead>
-                                <tbody>${failureRows}</tbody>
+                                <tbody>${reportRows}</tbody>
                             </table>
                         </div>
                     </div>
                     ` : `
                     <div class="refresh-success-message">
-                        <i class="fas fa-check-circle"></i> ${translate('modals.metadataFetchSummary.successMessage', { count: success, type: this.apiConfig.config.displayName }, 'All ' + success + ' ' + this.apiConfig.config.displayName + 's updated successfully!')}
+                        <i class="fas fa-check-circle"></i> ${translate('modals.metadataFetchSummary.noItemsMessage', {}, 'No models needed processing.')}
                     </div>
                     `}
 
                     <div class="modal-actions">
                         <button class="cancel-btn" data-action="close-modal">${translate('modals.metadataFetchSummary.close', {}, 'Close')}</button>
-                        ${failure_count > 0 ? `
                         <button class="secondary-btn" data-action="copy-report"><i class="fas fa-copy"></i> ${translate('modals.metadataFetchSummary.copyReport', {}, 'Copy Report')}</button>
                         <button class="secondary-btn" data-action="download-csv"><i class="fas fa-download"></i> ${translate('modals.metadataFetchSummary.downloadCsv', {}, 'Download CSV')}</button>
-                        ` : ''}
+                        <button class="secondary-btn" data-action="download-json"><i class="fas fa-file-code"></i> ${translate('modals.metadataFetchSummary.downloadJson', {}, 'Download JSON')}</button>
                     </div>
                 </div>
             </div>
@@ -1072,6 +1104,9 @@ export class BaseModelApiClient {
                 case 'download-csv':
                     BaseModelApiClient._downloadRefreshReport(data);
                     break;
+                case 'download-json':
+                    BaseModelApiClient._downloadRefreshJson(data);
+                    break;
             }
         });
     }
@@ -1084,21 +1119,24 @@ export class BaseModelApiClient {
     }
 
     static _copyRefreshReport(btn, data) {
-        const { failures = [], success, processed, total, failure_count, skipped_count, elapsed_seconds } = data;
+        const report = data.report || {};
         const lines = [
             '=== Metadata Refresh Report ===',
-            `Date: ${new Date().toLocaleString()}`,
-            `Duration: ${elapsed_seconds}s`,
-            `Total scanned: ${total || processed}`,
-            `Successfully updated: ${success}`,
-            `Failed: ${failure_count}`,
-            `Skipped: ${skipped_count}`,
+            `Date: ${report.generated_at || new Date().toISOString()}`,
+            `Scope: ${report.scope || 'all'}${report.force ? ' (forced)' : ''}`,
+            `Duration: ${report.elapsed_seconds || 0}s`,
+            `Matched: ${report.matched || 0}`,
+            `Success: ${report.successful || 0}`,
+            `Updated: ${report.updated || 0}`,
+            `Invalid: ${report.invalid || 0}`,
+            `Failed: ${report.failed || 0}`,
+            `Skipped: ${report.skipped || 0}`,
             '',
         ];
-        if (failure_count > 0) {
-            lines.push('--- Failed Items ---');
-            failures.forEach((f, i) => {
-                lines.push(`${i + 1}. ${f.name || 'Unknown'} — ${f.error || 'Unknown error'}`);
+        if (report.items?.length) {
+            lines.push('--- Items ---');
+            report.items.forEach((item, i) => {
+                lines.push(`${i + 1}. [${item.status}] ${item.name || 'Unknown'}${item.detail ? ` — ${item.detail}` : ''}`);
             });
             lines.push('');
         }
@@ -1125,25 +1163,36 @@ export class BaseModelApiClient {
     }
 
     static _downloadRefreshReport(data) {
-        const { failures = [], success, processed, total, failure_count, skipped_count, elapsed_seconds } = data;
+        const report = data.report || {};
 
-        // CSV header
-        let csv = 'Model Name,Error\n';
-        failures.forEach(f => {
-            const name = (f.name || 'Unknown').replace(/"/g, '""');
-            const error = (f.error || 'Unknown').replace(/"/g, '""');
-            csv += `"${name}","${error}"\n`;
+        let csv = '\uFEFFModel Name,File Path,Status,Detail\n';
+        (report.items || []).forEach(item => {
+            const cells = [item.name, item.file_path, item.status, item.detail]
+                .map(value => `"${String(value || '').replace(/"/g, '""')}"`);
+            csv += `${cells.join(',')}\n`;
         });
 
-        // Add summary as trailing comments
-        csv += `\n# Summary: ${success} success, ${failure_count} failed, ${skipped_count} skipped, ${elapsed_seconds}s\n`;
-        csv += `# Total scanned: ${total || processed}\n`;
+        csv += `\n# Summary: ${report.successful || 0} success, ${report.updated || 0} updated, ${report.invalid || 0} invalid, ${report.failed || 0} failed, ${report.skipped || 0} skipped\n`;
+        csv += `# Matched: ${report.matched || 0}; duration: ${report.elapsed_seconds || 0}s\n`;
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        BaseModelApiClient._downloadReportBlob(csv, 'text/csv;charset=utf-8;', 'csv');
+    }
+
+    static _downloadRefreshJson(data) {
+        const report = data.report || data;
+        BaseModelApiClient._downloadReportBlob(
+            JSON.stringify(report, null, 2),
+            'application/json;charset=utf-8;',
+            'json'
+        );
+    }
+
+    static _downloadReportBlob(content, mimeType, extension) {
+        const blob = new Blob([content], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `metadata-refresh-failures-${Date.now()}.csv`;
+        a.download = `metadata-refresh-report-${Date.now()}.${extension}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

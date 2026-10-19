@@ -35,8 +35,8 @@ export class CheckpointsControls extends PageControls {
             
             
             // Add fetch from Civitai functionality for checkpoints
-            fetchFromCivitai: async () => {
-                return await getModelApiClient().fetchCivitaiMetadata();
+            fetchFromCivitai: async (options = {}) => {
+                return await getModelApiClient().fetchCivitaiMetadata(options);
             },
             
             // Add show download modal functionality

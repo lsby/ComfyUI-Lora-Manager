@@ -990,7 +990,12 @@
       },
       "fetch": {
         "title": "Fetch metadata from CivitAI",
-        "action": "Fetch"
+        "action": "Fetch",
+        "menuTitle": "Choose metadata fetch scope",
+        "selected": "Fetch Selected",
+        "all": "Fetch All",
+        "forceSelected": "Force Fetch Selected",
+        "forceAll": "Force Fetch All"
       },
       "download": {
         "title": "Download from URL",
@@ -2212,6 +2217,8 @@
     "metadataFetchSummary": {
       "title": "Metadata Fetch Summary",
       "statSuccess": "Success",
+      "statUpdated": "Updated",
+      "statInvalid": "Invalid",
       "statFailed": "Failed",
       "statSkipped": "Skipped",
       "statOffline": "Drive Offline",
@@ -2222,8 +2229,13 @@
       "close": "Close",
       "copyReport": "Copy Report",
       "downloadCsv": "Download CSV",
+      "downloadJson": "Download JSON",
+      "reportItems": "Report Items ({count})",
+      "noItemsMessage": "No models needed processing.",
       "columnModelName": "Model Name",
-      "columnError": "Error"
+      "columnError": "Error",
+      "columnStatus": "Status",
+      "columnDetail": "Detail"
     },
     "downloadBatchSummary": {
       "title": "Batch Download Summary",
@@ -2828,6 +2840,7 @@
       "reloadFailed": "Failed to reload {pageType}: {message}",
       "refreshFailed": "Failed to {action} {pageType}: {message}",
       "fetchMetadataFailed": "Failed to fetch metadata: {message}",
+      "selectModelsFirst": "Select one or more models first.",
       "clearFilterFailed": "Failed to clear custom filter: {message}"
     },
     "contextMenu": {

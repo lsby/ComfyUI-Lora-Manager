@@ -252,7 +252,7 @@ export class PageControls {
                 
                 // Toggle current dropdown
                 const isOpen = dropdownGroup.classList.toggle('active');
-                if (isOpen) {
+                if (isOpen && dropdownGroup.querySelector('#refreshScopeMenu')) {
                     this.loadScanScopeMenu();
                 }
             });
@@ -433,8 +433,24 @@ export class PageControls {
         // Fetch from Civitai button - available for both loras and checkpoints
         const fetchButton = document.querySelector('[data-action="fetch"]');
         if (fetchButton) {
-            fetchButton.addEventListener('click', () => this.fetchFromCivitai());
+            fetchButton.addEventListener('click', () => this.fetchFromCivitai({ scope: 'all' }));
         }
+
+        document.querySelectorAll('[data-action^="fetch-"]').forEach(item => {
+            const action = item.dataset.action;
+            const optionsByAction = {
+                'fetch-selected': { scope: 'selected', force: false },
+                'fetch-all': { scope: 'all', force: false },
+                'fetch-selected-force': { scope: 'selected', force: true },
+                'fetch-all-force': { scope: 'all', force: true },
+            };
+            if (!optionsByAction[action]) return;
+            item.addEventListener('click', (event) => {
+                event.stopPropagation();
+                document.querySelector('.dropdown-group.active')?.classList.remove('active');
+                this.fetchFromCivitai(optionsByAction[action]);
+            });
+        });
         
         const downloadButton = document.querySelector('[data-action="download"]');
         if (downloadButton) {
@@ -607,14 +623,20 @@ export class PageControls {
     /**
      * Fetch metadata from Civitai (available for both LoRAs and Checkpoints)
      */
-    async fetchFromCivitai() {
+    async fetchFromCivitai({ scope = 'all', force = false } = {}) {
         if (!this.api) {
             console.error('API methods not registered');
             return;
         }
+
+        const filePaths = scope === 'selected' ? Array.from(state.selectedModels || []) : null;
+        if (scope === 'selected' && filePaths.length === 0) {
+            showToast('toast.controls.selectModelsFirst', {}, 'info');
+            return;
+        }
         
         try {
-            await this.api.fetchFromCivitai();
+            await this.api.fetchFromCivitai({ scope, force, filePaths });
         } catch (error) {
             console.error('Error fetching metadata:', error);
             showToast('toast.controls.fetchMetadataFailed', { message: error.message }, 'error');

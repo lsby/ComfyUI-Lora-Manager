@@ -303,6 +303,7 @@ class MetadataSyncService:
         cancel_check: Optional[Callable[[], bool]] = None,
         preview_max_retries: Optional[int] = None,
         preview_connect_timeout_seconds: Optional[float] = None,
+        force_retry: bool = False,
     ) -> tuple[bool, Optional[str]]:
         """Fetch metadata for a model and update both disk and cache state.
 
@@ -324,7 +325,7 @@ class MetadataSyncService:
             provider_attempts: list[tuple[Optional[str], MetadataProviderProtocol]] = []
             sqlite_attempted = False
 
-            if model_data.get("civitai_deleted") is True:
+            if model_data.get("civitai_deleted") is True and not force_retry:
                 # Sub_type-restricted providers (e.g. OpenModelDB for
                 # upscalers) stay reachable for deleted models: their
                 # catalogues grow independently of CivitAI, so a model deleted

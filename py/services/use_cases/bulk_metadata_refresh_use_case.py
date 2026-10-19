@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol, Sequence
 
 from ..metadata_sync_service import MetadataSyncService
@@ -40,35 +43,42 @@ class BulkMetadataRefreshUseCase:
         self,
         *,
         progress_callback: Optional[MetadataRefreshProgressReporter] = None,
+        file_paths: Optional[Sequence[str]] = None,
+        force: bool = False,
     ) -> Dict[str, Any]:
-        """Refresh metadata for all qualifying models."""
+        """Refresh metadata for all or a caller-selected set of models."""
 
         cache = await self._service.scanner.get_cached_data()
-        total_models = len(cache.raw_data)
+        requested_paths = list(dict.fromkeys(file_paths or []))
+        if file_paths is None:
+            scope_models = list(cache.raw_data)
+            scope = "all"
+        else:
+            requested = {self._normalize_path(path) for path in requested_paths}
+            scope_models = [
+                model
+                for model in cache.raw_data
+                if self._normalize_path(model.get("file_path", "")) in requested
+            ]
+            scope = "selected"
+        total_models = len(scope_models)
 
         enable_metadata_archive_db = self._settings.get("enable_metadata_archive_db", False)
         skip_paths = self._settings.get("metadata_refresh_skip_paths", [])
-        eligible: Sequence[Dict[str, Any]] = [
-            model
-            for model in cache.raw_data
-            if not model.get("skip_metadata_refresh", False)
-            and not self._is_in_skip_path(model.get("folder", ""), skip_paths)
-            and (not model.get("civitai") or not model["civitai"].get("id"))
-            # Skip models linked to an external model site (Hugging Face /
-            # ModelScope / TensorArt) — they are not on CivitAI / CivArchive.
-            # Users can still refresh them individually via the right-click
-            # context menu.
-            and not has_external_source(model)
-            and not (
-                # Skip models confirmed not on CivitAI when no need to retry
-                model.get("from_civitai") is False
-                and model.get("civitai_deleted") is True
-                and (
-                    not enable_metadata_archive_db
-                    or model.get("db_checked", False)
-                )
+        eligible: List[Dict[str, Any]] = []
+        report_items: List[Dict[str, Any]] = []
+
+        for model in scope_models:
+            reason = self._skip_reason(
+                model,
+                skip_paths=skip_paths,
+                enable_metadata_archive_db=enable_metadata_archive_db,
+                force=force,
             )
-        ]
+            if reason:
+                report_items.append(self._report_item(model, "skipped", reason))
+            else:
+                eligible.append(model)
 
         # Models on a drive that cannot be read right now stay in the cache
         # (scoped scan keeps them), but fetching their metadata would only
@@ -84,6 +94,13 @@ class BulkMetadataRefreshUseCase:
             to_process = list(eligible)
         offline_skipped = len(eligible) - len(to_process)
         if offline_skipped:
+            queued_paths = {model.get("file_path") for model in to_process}
+            for model in eligible:
+                if model.get("file_path") not in queued_paths:
+                    report_items.append(
+                        self._report_item(model, "skipped", "Model drive is offline")
+                    )
+        if offline_skipped:
             self._logger.info(
                 "Bulk metadata refresh: %d model(s) skipped, drive offline: %s",
                 offline_skipped,
@@ -91,9 +108,11 @@ class BulkMetadataRefreshUseCase:
             )
 
         total_to_process = len(to_process)
-        initial_skipped = total_models - total_to_process  # models excluded from fetch queue
+        initial_skipped = total_models - total_to_process
         processed = 0
         success = 0
+        updated_count = 0
+        invalid_count = 0
         skipped_count = initial_skipped
         handled_count = initial_skipped
         needs_resort = False
@@ -110,6 +129,8 @@ class BulkMetadataRefreshUseCase:
                 "total": total_models,
                 "processed": processed,
                 "success": success,
+                "updated_count": updated_count,
+                "invalid_count": invalid_count,
                 "failure_count": len(failures),
                 "skipped_count": skipped_count,
                 "offline_skipped": offline_skipped,
@@ -120,8 +141,8 @@ class BulkMetadataRefreshUseCase:
             # cancelled, rate_limited) to avoid serializing the list on every
             # per-model progress update.
             if status in ("completed", "cancelled", "rate_limited"):
-                if failures:
-                    payload["failures"] = failures
+                payload["failures"] = failures
+                payload["report"] = build_report(status)
                 if offline_roots:
                     payload["offline_roots"] = [
                         {"path": root["path"], "label": root["label"]}
@@ -129,6 +150,49 @@ class BulkMetadataRefreshUseCase:
                     ]
             payload.update(extra)
             await progress_callback.on_progress(payload)
+
+        def build_report(status: str) -> Dict[str, Any]:
+            return {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "model_type": self._service.model_type,
+                "scope": scope,
+                "force": force,
+                "status": status,
+                "requested": len(requested_paths) if file_paths is not None else total_models,
+                "matched": total_models,
+                "attempted": processed,
+                "successful": success,
+                "updated": updated_count,
+                "unchanged": max(0, success - updated_count),
+                "invalid": invalid_count,
+                "failed": len(failures),
+                "skipped": skipped_count,
+                "elapsed_seconds": int(time.monotonic() - start_time),
+                "items": report_items,
+            }
+
+        def result_payload(status: str, message: str, ok: bool, **extra: Any) -> Dict[str, Any]:
+            payload: Dict[str, Any] = {
+                "success": ok,
+                "message": message,
+                "processed": processed,
+                # Preserve the legacy response contract: ``updated`` meant a
+                # successful fetch. Detailed reports use ``updated_count`` for
+                # models whose metadata actually changed.
+                "updated": success,
+                "successful_count": success,
+                "updated_count": updated_count,
+                "invalid_count": invalid_count,
+                "total": total_models,
+                "failures": failures,
+                "failure_count": len(failures),
+                "skipped_count": skipped_count,
+                "offline_skipped": offline_skipped,
+                "elapsed_seconds": int(time.monotonic() - start_time),
+                "report": build_report(status),
+            }
+            payload.update(extra)
+            return payload
 
         await emit(
             "started",
@@ -143,7 +207,7 @@ class BulkMetadataRefreshUseCase:
             if self._service.scanner.is_cancelled():
                 self._logger.info("Bulk metadata refresh cancelled by user")
                 await emit("cancelled", processed=processed, success=success)
-                return {"success": False, "message": "Operation cancelled", "processed": processed, "updated": success, "total": total_models, "failures": failures, "failure_count": len(failures), "skipped_count": skipped_count, "offline_skipped": offline_skipped, "elapsed_seconds": int(time.monotonic() - start_time)}
+                return result_payload("cancelled", "Operation cancelled", False)
             try:
                 original_name = model.get("model_name")
                 await emit(
@@ -174,12 +238,15 @@ class BulkMetadataRefreshUseCase:
                             hash_status = "completed"
                         else:
                             self._logger.error(f"Failed to calculate hash for {file_path}")
-                            failures.append({"name": model.get("model_name", file_path or "Unknown"), "error": "Failed to calculate hash"})
+                            error = "Failed to calculate hash"
+                            failures.append({"name": model.get("model_name", file_path or "Unknown"), "error": error})
+                            report_items.append(self._report_item(model, "failed", error))
                             processed += 1
                             handled_count += 1
                             continue
                     else:
                         self._logger.warning(f"Scanner does not support lazy hash calculation for {file_path}")
+                        report_items.append(self._report_item(model, "skipped", "Hash calculation is not supported"))
                         skipped_count += 1
                         processed += 1
                         handled_count += 1
@@ -188,6 +255,7 @@ class BulkMetadataRefreshUseCase:
                 # Skip models without valid hash
                 if not model.get("sha256"):
                     self._logger.warning(f"Skipping model without hash: {file_path}")
+                    report_items.append(self._report_item(model, "skipped", "Model has no SHA-256 hash"))
                     skipped_count += 1
                     processed += 1
                     handled_count += 1
@@ -204,6 +272,8 @@ class BulkMetadataRefreshUseCase:
                     data_to_save.pop("folder", None)
                     await MetadataManager.save_metadata(file_path, data_to_save)
 
+                before_snapshot = self._metadata_snapshot(model)
+
                 result, error_msg = await self._metadata_sync.fetch_and_update_model(
                     sha256=model["sha256"],
                     file_path=model["file_path"],
@@ -213,6 +283,7 @@ class BulkMetadataRefreshUseCase:
                     cancel_check=self._service.scanner.is_cancelled,
                     preview_max_retries=0,
                     preview_connect_timeout_seconds=10,
+                    force_retry=force,
                 )
 
                 if not result and error_msg and "Rate limited" in error_msg:
@@ -222,7 +293,13 @@ class BulkMetadataRefreshUseCase:
 
                 if not result:
                     current_name = model.get("model_name", file_path or "Unknown")
-                    failures.append({"name": current_name, "error": error_msg or "Unknown error"})
+                    error = error_msg or "Unknown error"
+                    if self._is_invalid_model(model, error):
+                        invalid_count += 1
+                        report_items.append(self._report_item(model, "invalid", error))
+                    else:
+                        failures.append({"name": current_name, "error": error})
+                        report_items.append(self._report_item(model, "failed", error))
                     self._logger.warning("Failed to fetch metadata for %s: %s", current_name, error_msg)
 
                 if consecutive_rate_limits >= RATE_LIMIT_ABORT_THRESHOLD:
@@ -240,21 +317,20 @@ class BulkMetadataRefreshUseCase:
                     await emit(
                         "rate_limited",
                     )
-                    return {
-                        "success": False,
-                        "message": f"Rate limit detected; {total_to_process - processed} models skipped",
-                        "processed": processed,
-                        "updated": success,
-                        "total": total_models,
-                        "failures": failures,
-                        "failure_count": len(failures),
-                        "skipped_count": skipped_count,
-                        "offline_skipped": offline_skipped,
-                        "elapsed_seconds": int(time.monotonic() - start_time),
-                    }
+                    return result_payload(
+                        "rate_limited",
+                        f"Rate limit detected; {total_to_process - processed} models skipped",
+                        False,
+                    )
 
                 if result:
                     success += 1
+                    changed = before_snapshot != self._metadata_snapshot(model)
+                    if changed:
+                        updated_count += 1
+                    report_items.append(
+                        self._report_item(model, "updated" if changed else "unchanged")
+                    )
                     if original_name != model.get("model_name"):
                         needs_resort = True
                 processed += 1
@@ -273,6 +349,7 @@ class BulkMetadataRefreshUseCase:
                 handled_count += 1
                 current_name = model.get("model_name", model.get("file_path", "Unknown"))
                 failures.append({"name": current_name, "error": str(exc)})
+                report_items.append(self._report_item(model, "failed", str(exc)))
                 self._logger.error(
                     "Error fetching CivitAI data for %s: %s",
                     model.get("file_path"),
@@ -294,7 +371,7 @@ class BulkMetadataRefreshUseCase:
         }
         archive_service = get_model_archive_service()
         if archive_service.enabled:
-            archive_total = len(cache.raw_data)
+            archive_total = len(scope_models)
             await emit(
                 "archive_started",
                 phase="archive",
@@ -320,11 +397,9 @@ class BulkMetadataRefreshUseCase:
                     current_name=payload["current_name"],
                 )
 
-            # Models with complete CivitAI metadata are intentionally skipped
-            # by the fetch queue above. Repair all of their durable archives in
-            # a separately reported, cancellable phase.
+            # Repair archives only inside the requested scope.
             archive_summary = await archive_service.archive_existing(
-                cache.raw_data,
+                scope_models,
                 download_remote_media=True,
                 cancel_check=self._service.scanner.is_cancelled,
                 progress_callback=report_archive_progress,
@@ -340,24 +415,20 @@ class BulkMetadataRefreshUseCase:
                     media_downloaded=archive_summary["media_downloaded"],
                     media_failed=archive_summary["media_failed"],
                 )
-                return {
-                    "success": False,
-                    "message": "Operation cancelled during model archive repair",
-                    "processed": processed,
-                    "updated": success,
-                    "total": total_models,
-                    "failures": failures,
-                    "failure_count": len(failures),
-                    "skipped_count": skipped_count,
-                    "archive": archive_summary,
-                    "elapsed_seconds": int(time.monotonic() - start_time),
-                }
+                return result_payload(
+                    "cancelled",
+                    "Operation cancelled during model archive repair",
+                    False,
+                    archive=archive_summary,
+                )
 
         await emit(
             "completed",
             phase="complete",
             processed=processed,
             success=success,
+            updated_count=updated_count,
+            invalid_count=invalid_count,
             archive_processed=archive_summary["processed"],
             archive_total=archive_summary["total"],
             archive_success=archive_summary["archived"],
@@ -369,7 +440,8 @@ class BulkMetadataRefreshUseCase:
 
         message = (
             "Successfully updated "
-            f"{success} of {processed} processed {self._service.model_type}s (total: {total_models})"
+            f"{success} of {processed} processed {self._service.model_type}s "
+            f"({updated_count} changed, {invalid_count} invalid, total: {total_models})"
         )
         if offline_skipped:
             message += (
@@ -378,7 +450,79 @@ class BulkMetadataRefreshUseCase:
                 + ")"
             )
 
-        return {"success": True, "message": message, "processed": processed, "updated": success, "total": total_models, "failures": failures, "failure_count": len(failures), "skipped_count": skipped_count, "offline_skipped": offline_skipped, "archive": archive_summary, "elapsed_seconds": int(time.monotonic() - start_time)}
+        return result_payload("completed", message, True, archive=archive_summary)
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        if not path:
+            return ""
+        return os.path.normcase(os.path.abspath(path))
+
+    @staticmethod
+    def _report_item(
+        model: Dict[str, Any], status: str, detail: str = ""
+    ) -> Dict[str, Any]:
+        return {
+            "name": model.get("model_name")
+            or model.get("file_name")
+            or model.get("file_path")
+            or "Unknown",
+            "file_path": model.get("file_path", ""),
+            "status": status,
+            "detail": detail,
+        }
+
+    @staticmethod
+    def _metadata_snapshot(model: Dict[str, Any]) -> str:
+        fields = {
+            key: model.get(key)
+            for key in (
+                "model_name",
+                "modelDescription",
+                "tags",
+                "base_model",
+                "civitai",
+                "from_civitai",
+                "civitai_deleted",
+                "metadata_source",
+                "preview_url",
+            )
+        }
+        return json.dumps(fields, sort_keys=True, ensure_ascii=False, default=str)
+
+    @staticmethod
+    def _is_invalid_model(model: Dict[str, Any], error: str) -> bool:
+        lowered = error.lower()
+        return model.get("civitai_deleted") is True or any(
+            marker in lowered
+            for marker in ("model not found", "model is deleted", "version not found")
+        )
+
+    def _skip_reason(
+        self,
+        model: Dict[str, Any],
+        *,
+        skip_paths: List[str],
+        enable_metadata_archive_db: bool,
+        force: bool,
+    ) -> str:
+        if model.get("skip_metadata_refresh", False):
+            return "Model is configured to skip metadata refresh"
+        if self._is_in_skip_path(model.get("folder", ""), skip_paths):
+            return "Model folder is configured to skip metadata refresh"
+        if has_external_source(model):
+            return "Model uses a non-CivitAI source"
+        if force:
+            return ""
+        if model.get("civitai") and model["civitai"].get("id"):
+            return "Metadata already exists"
+        if (
+            model.get("from_civitai") is False
+            and model.get("civitai_deleted") is True
+            and (not enable_metadata_archive_db or model.get("db_checked", False))
+        ):
+            return "Model was previously confirmed unavailable"
+        return ""
 
     def _offline_root_details(self) -> List[Dict[str, str]]:
         """Configured roots whose directory cannot be read right now.
@@ -443,11 +587,17 @@ class BulkMetadataRefreshUseCase:
         self,
         *,
         progress_callback: Optional[MetadataRefreshProgressReporter] = None,
+        file_paths: Optional[Sequence[str]] = None,
+        force: bool = False,
     ) -> Dict[str, Any]:
         """Wrapper providing progress notification on unexpected failures."""
 
         try:
-            return await self.execute(progress_callback=progress_callback)
+            return await self.execute(
+                progress_callback=progress_callback,
+                file_paths=file_paths,
+                force=force,
+            )
         except Exception as exc:
             if progress_callback is not None:
                 await progress_callback.on_progress({"status": "error", "error": str(exc)})

@@ -1230,3 +1230,72 @@ def test_price_alert_endpoints_are_not_registered():
         for definition in COMMON_ROUTE_DEFINITIONS
         if "price-alert" in definition.path_template
     ] == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_civitai_forwards_selected_scope_and_force():
+    refresh_use_case = SimpleNamespace(
+        execute_with_error_handling=AsyncMock(return_value={"success": True})
+    )
+    progress_callback = SimpleNamespace()
+    handler = ModelCivitaiHandler(
+        service=SimpleNamespace(model_type="lora"),
+        settings_service=SimpleNamespace(),
+        ws_manager=SimpleNamespace(),
+        logger=logging.getLogger(__name__),
+        metadata_provider_factory=AsyncMock(),
+        validate_model_type=lambda *_: True,
+        expected_model_types=lambda: "LoRA",
+        find_model_file=lambda *_: None,
+        metadata_sync=SimpleNamespace(),
+        metadata_refresh_use_case=refresh_use_case,
+        metadata_progress_callback=progress_callback,
+    )
+    request = SimpleNamespace(
+        can_read_body=True,
+        json=AsyncMock(
+            return_value={
+                "scope": "selected",
+                "force": True,
+                "file_paths": ["C:/models/one.safetensors"],
+            }
+        ),
+    )
+
+    response = await handler.fetch_all_civitai(request)
+
+    assert response.status == 200
+    refresh_use_case.execute_with_error_handling.assert_awaited_once_with(
+        progress_callback=progress_callback,
+        file_paths=["C:/models/one.safetensors"],
+        force=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_civitai_rejects_empty_selected_scope():
+    refresh_use_case = SimpleNamespace(execute_with_error_handling=AsyncMock())
+    handler = ModelCivitaiHandler(
+        service=SimpleNamespace(model_type="lora"),
+        settings_service=SimpleNamespace(),
+        ws_manager=SimpleNamespace(),
+        logger=logging.getLogger(__name__),
+        metadata_provider_factory=AsyncMock(),
+        validate_model_type=lambda *_: True,
+        expected_model_types=lambda: "LoRA",
+        find_model_file=lambda *_: None,
+        metadata_sync=SimpleNamespace(),
+        metadata_refresh_use_case=refresh_use_case,
+        metadata_progress_callback=SimpleNamespace(),
+    )
+    request = SimpleNamespace(
+        can_read_body=True,
+        json=AsyncMock(
+            return_value={"scope": "selected", "force": False, "file_paths": []}
+        ),
+    )
+
+    response = await handler.fetch_all_civitai(request)
+
+    assert response.status == 400
+    refresh_use_case.execute_with_error_handling.assert_not_awaited()

@@ -144,8 +144,15 @@ function renderControlsDom(pageKey) {
               <div class="dropdown-item" data-action="full-rebuild"></div>
             </div>
           </div>
-          <div class="control-group">
-            <button data-action="fetch"></button>
+          <div class="control-group dropdown-group">
+            <button data-action="fetch" class="dropdown-main"></button>
+            <button class="dropdown-toggle"></button>
+            <div class="dropdown-menu">
+              <div class="dropdown-item" data-action="fetch-selected"></div>
+              <div class="dropdown-item" data-action="fetch-all"></div>
+              <div class="dropdown-item" data-action="fetch-selected-force"></div>
+              <div class="dropdown-item" data-action="fetch-all-force"></div>
+            </div>
           </div>
           <div class="control-group">
             <button data-action="download"></button>
@@ -1239,9 +1246,41 @@ describe('PageControls action keyboard shortcuts', () => {
 
     expect(controls.handleActionShortcut(keydownEvent('f'))).toBe(true);
     expect(fetchCivitaiMetadataMock).toHaveBeenCalledTimes(1);
+    expect(fetchCivitaiMetadataMock).toHaveBeenCalledWith({
+      scope: 'all',
+      force: false,
+      filePaths: null,
+    });
 
     expect(controls.handleActionShortcut(keydownEvent('d'))).toBe(true);
     expect(downloadManagerMock.showDownloadModal).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards selected and forced fetch menu choices', async () => {
+    await setupLorasControls();
+    const stateModule = await import('../../../static/js/state/index.js');
+    stateModule.state.selectedModels.add('C:/models/one.safetensors');
+
+    document.querySelector('[data-action="fetch-selected-force"]').click();
+    await Promise.resolve();
+
+    expect(fetchCivitaiMetadataMock).toHaveBeenCalledWith({
+      scope: 'selected',
+      force: true,
+      filePaths: ['C:/models/one.safetensors'],
+    });
+  });
+
+  it('does not fetch selected scope when nothing is selected', async () => {
+    await setupLorasControls();
+
+    document.querySelector('[data-action="fetch-selected"]').click();
+    await Promise.resolve();
+
+    expect(fetchCivitaiMetadataMock).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith(
+      'toast.controls.selectModelsFirst', {}, 'info'
+    );
   });
 
   it('handles a real keydown dispatched on the document', async () => {

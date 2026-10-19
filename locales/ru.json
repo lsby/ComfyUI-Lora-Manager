@@ -990,7 +990,12 @@
             },
             "fetch": {
                 "title": "Получить метаданные с CivitAI",
-                "action": "Получить"
+                "action": "Получить",
+                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
+                "selected": "[TODO: Translate] Fetch Selected",
+                "all": "[TODO: Translate] Fetch All",
+                "forceSelected": "[TODO: Translate] Force Fetch Selected",
+                "forceAll": "[TODO: Translate] Force Fetch All"
             },
             "download": {
                 "title": "Загрузить по URL",
@@ -2212,6 +2217,8 @@
         "metadataFetchSummary": {
             "title": "Сводка получения метаданных",
             "statSuccess": "Успешно",
+            "statUpdated": "[TODO: Translate] Updated",
+            "statInvalid": "[TODO: Translate] Invalid",
             "statFailed": "Ошибка",
             "statSkipped": "Пропущено",
             "statOffline": "Диск недоступен",
@@ -2222,8 +2229,13 @@
             "close": "Закрыть",
             "copyReport": "Копировать отчет",
             "downloadCsv": "Скачать CSV",
+            "downloadJson": "[TODO: Translate] Download JSON",
+            "reportItems": "[TODO: Translate] Report Items ({count})",
+            "noItemsMessage": "[TODO: Translate] No models needed processing.",
             "columnModelName": "Имя модели",
-            "columnError": "Ошибка"
+            "columnError": "Ошибка",
+            "columnStatus": "[TODO: Translate] Status",
+            "columnDetail": "[TODO: Translate] Detail"
         },
         "downloadBatchSummary": {
             "title": "Сводка пакетной загрузки",
@@ -2828,6 +2840,7 @@
             "reloadFailed": "Не удалось перезагрузить {pageType}: {message}",
             "refreshFailed": "Не удалось {action} {pageType}: {message}",
             "fetchMetadataFailed": "Не удалось получить метаданные: {message}",
+            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "clearFilterFailed": "Не удалось очистить пользовательский фильтр: {message}"
         },
         "contextMenu": {

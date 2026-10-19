@@ -39,8 +39,8 @@ export class LorasControls extends PageControls {
             
             
             // LoRA-specific API functions
-            fetchFromCivitai: async () => {
-                return await getModelApiClient().fetchCivitaiMetadata();
+            fetchFromCivitai: async (options = {}) => {
+                return await getModelApiClient().fetchCivitaiMetadata(options);
             },
             
             showDownloadModal: () => {

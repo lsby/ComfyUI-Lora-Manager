@@ -94,8 +94,15 @@
             </div>
             
             {% if page_id != 'recipes' %}
-            <div class="control-group">
-                <button data-action="fetch" title="{{ t('loras.controls.fetch.title') }}"><span><span>{{ t('loras.controls.fetch.action') }}</span> <kbd class="shortcut-key">F</kbd></span></button>
+            <div class="control-group dropdown-group">
+                <button data-action="fetch" class="dropdown-main" title="{{ t('loras.controls.fetch.title') }}"><span><span>{{ t('loras.controls.fetch.action') }}</span> <kbd class="shortcut-key">F</kbd></span></button>
+                <button class="dropdown-toggle" title="{{ t('loras.controls.fetch.menuTitle') }}" aria-label="{{ t('loras.controls.fetch.menuTitle') }}"><i class="fas fa-chevron-down"></i></button>
+                <div class="dropdown-menu fetch-dropdown-menu">
+                    <div class="dropdown-item" data-action="fetch-selected"><i class="fas fa-check-square"></i> {{ t('loras.controls.fetch.selected') }}</div>
+                    <div class="dropdown-item" data-action="fetch-all"><i class="fas fa-layer-group"></i> {{ t('loras.controls.fetch.all') }}</div>
+                    <div class="dropdown-item" data-action="fetch-selected-force"><i class="fas fa-sync-alt"></i> {{ t('loras.controls.fetch.forceSelected') }}</div>
+                    <div class="dropdown-item" data-action="fetch-all-force"><i class="fas fa-redo-alt"></i> {{ t('loras.controls.fetch.forceAll') }}</div>
+                </div>
             </div>
             <div class="control-group">
                 <button data-action="download" title="{{ t('loras.controls.download.title') }}">

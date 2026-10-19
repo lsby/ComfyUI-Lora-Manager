@@ -990,7 +990,12 @@
             },
             "fetch": {
                 "title": "Obtener metadatos de CivitAI",
-                "action": "Obtener"
+                "action": "Obtener",
+                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
+                "selected": "[TODO: Translate] Fetch Selected",
+                "all": "[TODO: Translate] Fetch All",
+                "forceSelected": "[TODO: Translate] Force Fetch Selected",
+                "forceAll": "[TODO: Translate] Force Fetch All"
             },
             "download": {
                 "title": "Descargar desde URL",
@@ -2212,6 +2217,8 @@
         "metadataFetchSummary": {
             "title": "Resumen de obtención de metadatos",
             "statSuccess": "Éxito",
+            "statUpdated": "[TODO: Translate] Updated",
+            "statInvalid": "[TODO: Translate] Invalid",
             "statFailed": "Fallido",
             "statSkipped": "Omitido",
             "statOffline": "Unidad sin conexión",
@@ -2222,8 +2229,13 @@
             "close": "Cerrar",
             "copyReport": "Copiar informe",
             "downloadCsv": "Descargar CSV",
+            "downloadJson": "[TODO: Translate] Download JSON",
+            "reportItems": "[TODO: Translate] Report Items ({count})",
+            "noItemsMessage": "[TODO: Translate] No models needed processing.",
             "columnModelName": "Nombre del modelo",
-            "columnError": "Error"
+            "columnError": "Error",
+            "columnStatus": "[TODO: Translate] Status",
+            "columnDetail": "[TODO: Translate] Detail"
         },
         "downloadBatchSummary": {
             "title": "Resumen de descarga por lotes",
@@ -2828,6 +2840,7 @@
             "reloadFailed": "Error al recargar {pageType}: {message}",
             "refreshFailed": "Error al {action} {pageType}: {message}",
             "fetchMetadataFailed": "Error al obtener metadatos: {message}",
+            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "clearFilterFailed": "Error al limpiar filtro personalizado: {message}"
         },
         "contextMenu": {

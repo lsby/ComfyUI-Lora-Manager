@@ -990,7 +990,12 @@
             },
             "fetch": {
                 "title": "CivitAIからメタデータを取得",
-                "action": "取得"
+                "action": "取得",
+                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
+                "selected": "[TODO: Translate] Fetch Selected",
+                "all": "[TODO: Translate] Fetch All",
+                "forceSelected": "[TODO: Translate] Force Fetch Selected",
+                "forceAll": "[TODO: Translate] Force Fetch All"
             },
             "download": {
                 "title": "URLからダウンロード",
@@ -2212,6 +2217,8 @@
         "metadataFetchSummary": {
             "title": "メタデータ取得サマリー",
             "statSuccess": "成功",
+            "statUpdated": "[TODO: Translate] Updated",
+            "statInvalid": "[TODO: Translate] Invalid",
             "statFailed": "失敗",
             "statSkipped": "スキップ",
             "statOffline": "ドライブ オフライン",
@@ -2222,8 +2229,13 @@
             "close": "閉じる",
             "copyReport": "レポートをコピー",
             "downloadCsv": "CSVをダウンロード",
+            "downloadJson": "[TODO: Translate] Download JSON",
+            "reportItems": "[TODO: Translate] Report Items ({count})",
+            "noItemsMessage": "[TODO: Translate] No models needed processing.",
             "columnModelName": "モデル名",
-            "columnError": "エラー"
+            "columnError": "エラー",
+            "columnStatus": "[TODO: Translate] Status",
+            "columnDetail": "[TODO: Translate] Detail"
         },
         "downloadBatchSummary": {
             "title": "バッチダウンロードの概要",
@@ -2828,6 +2840,7 @@
             "reloadFailed": "{pageType}の再読み込みに失敗しました：{message}",
             "refreshFailed": "{pageType}の{action}に失敗しました：{message}",
             "fetchMetadataFailed": "メタデータの取得に失敗しました：{message}",
+            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "clearFilterFailed": "カスタムフィルタのクリアに失敗しました：{message}"
         },
         "contextMenu": {

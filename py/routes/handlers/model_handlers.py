@@ -2353,8 +2353,31 @@ class ModelCivitaiHandler:
 
     async def fetch_all_civitai(self, request: web.Request) -> web.Response:
         try:
+            payload = await request.json() if request.can_read_body else {}
+            if not isinstance(payload, dict):
+                return web.json_response({"error": "Request body must be an object"}, status=400)
+
+            scope = payload.get("scope", "all")
+            force = payload.get("force", False)
+            file_paths = payload.get("file_paths") if scope == "selected" else None
+            if scope not in ("all", "selected"):
+                return web.json_response({"error": "scope must be 'all' or 'selected'"}, status=400)
+            if not isinstance(force, bool):
+                return web.json_response({"error": "force must be a boolean"}, status=400)
+            if scope == "selected" and (
+                not isinstance(file_paths, list)
+                or not file_paths
+                or not all(isinstance(path, str) and path for path in file_paths)
+            ):
+                return web.json_response(
+                    {"error": "file_paths must be a non-empty string array for selected scope"},
+                    status=400,
+                )
+
             result = await self._metadata_refresh_use_case.execute_with_error_handling(
-                progress_callback=self._metadata_progress_callback
+                progress_callback=self._metadata_progress_callback,
+                file_paths=file_paths,
+                force=force,
             )
             return web.json_response(result)
         except Exception as exc:

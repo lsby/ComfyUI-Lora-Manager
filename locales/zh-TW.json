@@ -990,7 +990,12 @@
             },
             "fetch": {
                 "title": "從 CivitAI 取得 metadata",
-                "action": "取得"
+                "action": "取得",
+                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
+                "selected": "[TODO: Translate] Fetch Selected",
+                "all": "[TODO: Translate] Fetch All",
+                "forceSelected": "[TODO: Translate] Force Fetch Selected",
+                "forceAll": "[TODO: Translate] Force Fetch All"
             },
             "download": {
                 "title": "從網址下載",
@@ -2212,6 +2217,8 @@
         "metadataFetchSummary": {
             "title": "元資料獲取摘要",
             "statSuccess": "成功",
+            "statUpdated": "[TODO: Translate] Updated",
+            "statInvalid": "[TODO: Translate] Invalid",
             "statFailed": "失敗",
             "statSkipped": "已跳過",
             "statOffline": "磁碟機離線",
@@ -2222,8 +2229,13 @@
             "close": "關閉",
             "copyReport": "複製報告",
             "downloadCsv": "下載 CSV",
+            "downloadJson": "[TODO: Translate] Download JSON",
+            "reportItems": "[TODO: Translate] Report Items ({count})",
+            "noItemsMessage": "[TODO: Translate] No models needed processing.",
             "columnModelName": "模型名稱",
-            "columnError": "錯誤"
+            "columnError": "錯誤",
+            "columnStatus": "[TODO: Translate] Status",
+            "columnDetail": "[TODO: Translate] Detail"
         },
         "downloadBatchSummary": {
             "title": "批次下載摘要",
@@ -2828,6 +2840,7 @@
             "reloadFailed": "重新載入 {pageType} 失敗：{message}",
             "refreshFailed": "{action} {pageType} 失敗：{message}",
             "fetchMetadataFailed": "取得 metadata 失敗：{message}",
+            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "clearFilterFailed": "清除自訂篩選失敗：{message}"
         },
         "contextMenu": {

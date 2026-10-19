@@ -318,6 +318,89 @@ async def test_bulk_metadata_refresh_reports_archive_stage(
     assert result["archive"]["archived"] == 1
 
 
+async def test_bulk_metadata_refresh_selected_force_only_processes_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scanner = MockScanner()
+    scanner._cache.raw_data = [
+        {
+            "file_path": "C:/models/selected.safetensors",
+            "sha256": "selected-hash",
+            "model_name": "Selected",
+            "civitai": {"id": 10},
+        },
+        {
+            "file_path": "C:/models/other.safetensors",
+            "sha256": "other-hash",
+            "model_name": "Other",
+            "civitai": {"id": 20},
+        },
+    ]
+    metadata_sync = StubMetadataSync()
+
+    async def fake_hydrate(model_data: Dict[str, Any]) -> Dict[str, Any]:
+        return model_data
+
+    monkeypatch.setattr(MetadataManager, "hydrate_model_data", staticmethod(fake_hydrate))
+    use_case = BulkMetadataRefreshUseCase(
+        service=MockModelService(scanner),
+        metadata_sync=metadata_sync,
+        settings_service=StubSettings(),
+        logger=logging.getLogger("test"),
+    )
+
+    result = await use_case.execute_with_error_handling(
+        file_paths=["C:/models/selected.safetensors"],
+        force=True,
+    )
+
+    assert len(metadata_sync.calls) == 1
+    assert metadata_sync.calls[0]["file_path"] == "C:/models/selected.safetensors"
+    assert metadata_sync.calls[0]["force_retry"] is True
+    assert result["report"]["scope"] == "selected"
+    assert result["report"]["force"] is True
+    assert result["report"]["successful"] == 1
+    assert result["report"]["updated"] == 1
+    assert result["report"]["items"][0]["status"] == "updated"
+
+
+async def test_bulk_metadata_refresh_reports_remote_model_as_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scanner = MockScanner()
+    scanner._cache.raw_data = [
+        {
+            "file_path": "missing.safetensors",
+            "sha256": "missing-hash",
+            "model_name": "Missing",
+        }
+    ]
+
+    class MissingMetadataSync(StubMetadataSync):
+        async def fetch_and_update_model(self, **kwargs: Any):
+            self.calls.append(kwargs)
+            kwargs["model_data"]["civitai_deleted"] = True
+            return False, "Model not found"
+
+    async def fake_hydrate(model_data: Dict[str, Any]) -> Dict[str, Any]:
+        return model_data
+
+    monkeypatch.setattr(MetadataManager, "hydrate_model_data", staticmethod(fake_hydrate))
+    use_case = BulkMetadataRefreshUseCase(
+        service=MockModelService(scanner),
+        metadata_sync=MissingMetadataSync(),
+        settings_service=StubSettings(),
+        logger=logging.getLogger("test"),
+    )
+
+    result = await use_case.execute_with_error_handling()
+
+    assert result["invalid_count"] == 1
+    assert result["failure_count"] == 0
+    assert result["report"]["invalid"] == 1
+    assert result["report"]["items"][0]["status"] == "invalid"
+
+
 async def test_bulk_metadata_refresh_reports_errors() -> None:
     class FailingScanner(MockScanner):
         async def get_cached_data(self, force_refresh: bool = False):

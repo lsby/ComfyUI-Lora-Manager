@@ -990,7 +990,12 @@
             },
             "fetch": {
                 "title": "CivitAI에서 메타데이터 가져오기",
-                "action": "가져오기"
+                "action": "가져오기",
+                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
+                "selected": "[TODO: Translate] Fetch Selected",
+                "all": "[TODO: Translate] Fetch All",
+                "forceSelected": "[TODO: Translate] Force Fetch Selected",
+                "forceAll": "[TODO: Translate] Force Fetch All"
             },
             "download": {
                 "title": "URL에서 다운로드",
@@ -2212,6 +2217,8 @@
         "metadataFetchSummary": {
             "title": "메타데이터 가져오기 요약",
             "statSuccess": "성공",
+            "statUpdated": "[TODO: Translate] Updated",
+            "statInvalid": "[TODO: Translate] Invalid",
             "statFailed": "실패",
             "statSkipped": "건너뜀",
             "statOffline": "드라이브 오프라인",
@@ -2222,8 +2229,13 @@
             "close": "닫기",
             "copyReport": "보고서 복사",
             "downloadCsv": "CSV 다운로드",
+            "downloadJson": "[TODO: Translate] Download JSON",
+            "reportItems": "[TODO: Translate] Report Items ({count})",
+            "noItemsMessage": "[TODO: Translate] No models needed processing.",
             "columnModelName": "모델 이름",
-            "columnError": "오류"
+            "columnError": "오류",
+            "columnStatus": "[TODO: Translate] Status",
+            "columnDetail": "[TODO: Translate] Detail"
         },
         "downloadBatchSummary": {
             "title": "일괄 다운로드 요약",
@@ -2828,6 +2840,7 @@
             "reloadFailed": "{pageType} 다시 로딩 실패: {message}",
             "refreshFailed": "{pageType} {action} 실패: {message}",
             "fetchMetadataFailed": "메타데이터 가져오기 실패: {message}",
+            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "clearFilterFailed": "사용자 정의 필터 지우기 실패: {message}"
         },
         "contextMenu": {

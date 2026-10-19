@@ -990,7 +990,12 @@
             },
             "fetch": {
                 "title": "אחזר מטא-נתונים מ-CivitAI",
-                "action": "אחזר"
+                "action": "אחזר",
+                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
+                "selected": "[TODO: Translate] Fetch Selected",
+                "all": "[TODO: Translate] Fetch All",
+                "forceSelected": "[TODO: Translate] Force Fetch Selected",
+                "forceAll": "[TODO: Translate] Force Fetch All"
             },
             "download": {
                 "title": "הורד מכתובת URL",
@@ -2212,6 +2217,8 @@
         "metadataFetchSummary": {
             "title": "סיכום שליפת מטא-נתונים",
             "statSuccess": "הצלחה",
+            "statUpdated": "[TODO: Translate] Updated",
+            "statInvalid": "[TODO: Translate] Invalid",
             "statFailed": "נכשל",
             "statSkipped": "דולג",
             "statOffline": "כונן לא זמין",
@@ -2222,8 +2229,13 @@
             "close": "סגור",
             "copyReport": "העתק דוח",
             "downloadCsv": "הורד CSV",
+            "downloadJson": "[TODO: Translate] Download JSON",
+            "reportItems": "[TODO: Translate] Report Items ({count})",
+            "noItemsMessage": "[TODO: Translate] No models needed processing.",
             "columnModelName": "שם המודל",
-            "columnError": "שגיאה"
+            "columnError": "שגיאה",
+            "columnStatus": "[TODO: Translate] Status",
+            "columnDetail": "[TODO: Translate] Detail"
         },
         "downloadBatchSummary": {
             "title": "סיכום הורדה בכמות",
@@ -2828,6 +2840,7 @@
             "reloadFailed": "טעינה מחדש של {pageType} נכשלה: {message}",
             "refreshFailed": "{action} של {pageType} נכשל: {message}",
             "fetchMetadataFailed": "אחזור המטא-נתונים נכשל: {message}",
+            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "clearFilterFailed": "ניקוי המסנן המותאם אישית נכשל: {message}"
         },
         "contextMenu": {

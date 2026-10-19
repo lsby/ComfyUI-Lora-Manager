@@ -33,8 +33,8 @@ export class OtherControls extends PageControls {
 
 
             // Add fetch from Civitai functionality for other models
-            fetchFromCivitai: async () => {
-                return await getModelApiClient().fetchCivitaiMetadata();
+            fetchFromCivitai: async (options = {}) => {
+                return await getModelApiClient().fetchCivitaiMetadata(options);
             },
 
             // Add show download modal functionality

@@ -990,7 +990,12 @@
             },
             "fetch": {
                 "title": "Metadaten von CivitAI abrufen",
-                "action": "Abrufen"
+                "action": "Abrufen",
+                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
+                "selected": "[TODO: Translate] Fetch Selected",
+                "all": "[TODO: Translate] Fetch All",
+                "forceSelected": "[TODO: Translate] Force Fetch Selected",
+                "forceAll": "[TODO: Translate] Force Fetch All"
             },
             "download": {
                 "title": "Von URL herunterladen",
@@ -2212,6 +2217,8 @@
         "metadataFetchSummary": {
             "title": "Metadaten abrufen — Zusammenfassung",
             "statSuccess": "Erfolgreich",
+            "statUpdated": "[TODO: Translate] Updated",
+            "statInvalid": "[TODO: Translate] Invalid",
             "statFailed": "Fehlgeschlagen",
             "statSkipped": "Übersprungen",
             "statOffline": "Laufwerk offline",
@@ -2222,8 +2229,13 @@
             "close": "Schließen",
             "copyReport": "Bericht kopieren",
             "downloadCsv": "CSV herunterladen",
+            "downloadJson": "[TODO: Translate] Download JSON",
+            "reportItems": "[TODO: Translate] Report Items ({count})",
+            "noItemsMessage": "[TODO: Translate] No models needed processing.",
             "columnModelName": "Modellname",
-            "columnError": "Fehler"
+            "columnError": "Fehler",
+            "columnStatus": "[TODO: Translate] Status",
+            "columnDetail": "[TODO: Translate] Detail"
         },
         "downloadBatchSummary": {
             "title": "Zusammenfassung des Batch-Downloads",
@@ -2828,6 +2840,7 @@
             "reloadFailed": "Fehler beim Neuladen von {pageType}: {message}",
             "refreshFailed": "Fehler beim {action} von {pageType}: {message}",
             "fetchMetadataFailed": "Fehler beim Abrufen der Metadaten: {message}",
+            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "clearFilterFailed": "Fehler beim Löschen des benutzerdefinierten Filters: {message}"
         },
         "contextMenu": {

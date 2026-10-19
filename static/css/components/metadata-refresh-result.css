@@ -47,6 +47,14 @@
     border-left-color: var(--color-success);
 }
 
+.stat-card-updated {
+    border-left-color: var(--color-info, #3b82f6);
+}
+
+.stat-card-invalid {
+    border-left-color: var(--color-warning);
+}
+
 .stat-card-failure {
     border-left-color: var(--color-error);
 }

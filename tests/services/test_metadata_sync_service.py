@@ -649,6 +649,29 @@ async def test_fetch_and_update_model_respects_deleted_without_archive():
 
 
 @pytest.mark.asyncio
+async def test_fetch_and_update_model_force_retries_deleted_model():
+    helpers = build_service(settings_values={"enable_metadata_archive_db": False})
+    helpers.default_provider.get_model_by_hash.return_value = (None, "Model not found")
+    model_data = {
+        "civitai_deleted": True,
+        "file_path": "/tmp/model.safetensors",
+    }
+
+    ok, error = await helpers.service.fetch_and_update_model(
+        sha256="abc",
+        file_path="/tmp/model.safetensors",
+        model_data=model_data,
+        update_cache_func=AsyncMock(),
+        force_retry=True,
+    )
+
+    assert not ok
+    assert "Model not found" in (error or "")
+    helpers.default_provider_factory.assert_awaited_once()
+    helpers.default_provider.get_model_by_hash.assert_awaited_once_with("abc")
+
+
+@pytest.mark.asyncio
 async def test_fetch_and_update_model_prefers_civarchive_for_deleted_models(tmp_path):
     default_provider = SimpleNamespace(
         get_model_by_hash=AsyncMock(),
