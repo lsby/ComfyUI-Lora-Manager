@@ -211,6 +211,12 @@ def _normalized_root_prefix(root: str) -> str:
     return prefix.lower() if _CASE_INSENSITIVE_PATHS else prefix
 
 
+def _canonical_root_key(root: str) -> str:
+    """Return a comparison key for equivalent root path spellings."""
+    normalized = os.path.normpath(os.path.abspath(root)).replace("\\", "/")
+    return normalized.lower() if _CASE_INSENSITIVE_PATHS else normalized
+
+
 def _path_matches_prefix(path: str, prefix: str) -> bool:
     """Match a cached business path against a normalized scope prefix."""
     candidate = path.lower() if _CASE_INSENSITIVE_PATHS else path
@@ -1666,18 +1672,28 @@ class ModelScanner:
         roots: List[str] = []
         seen: Set[str] = set()
         for root in self.get_model_roots():
-            if not root or root in seen:
+            if not root:
                 continue
-            seen.add(root)
+            root_key = _canonical_root_key(root)
+            if root_key in seen:
+                continue
+            seen.add(root_key)
             roots.append(root)
+        available_keys = set(seen)
 
         # Configured roots that are missing from the live list: their directory
         # did not exist when it was built (a drive switched off at startup).
         # They are reported so the menu offers a row in both states instead of
         # hiding the root until the process is restarted.
-        unavailable = [
-            root for root in self.get_configured_model_roots() if root not in seen
-        ]
+        unavailable: List[str] = []
+        for root in self.get_configured_model_roots():
+            if not root:
+                continue
+            root_key = _canonical_root_key(root)
+            if root_key in seen:
+                continue
+            seen.add(root_key)
+            unavailable.append(root)
 
         labels = _root_display_labels(roots + unavailable)
         cached_paths = (
@@ -1691,7 +1707,7 @@ class ModelScanner:
                 'path': root.replace(os.sep, '/'),
                 'label': labels[root],
                 'reachable': os.path.exists(root),
-                'available': root in seen,
+                'available': _canonical_root_key(root) in available_keys,
                 'models': counts.get(root, 0),
             }
             for root in roots + unavailable

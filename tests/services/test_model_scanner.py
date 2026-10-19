@@ -2748,6 +2748,34 @@ async def test_describe_model_roots_reports_unavailable_configured_root(
 
 
 @pytest.mark.asyncio
+async def test_describe_model_roots_deduplicates_equivalent_path_spellings(
+    tmp_path: Path, monkeypatch
+):
+    root = tmp_path / "loras"
+    root.mkdir()
+    offline = tmp_path / "offline"
+    scanner = DummyScanner(root)
+
+    live_path = str(root)
+    configured_variant = live_path + os.sep
+    monkeypatch.setattr(scanner, "get_model_roots", lambda: [live_path])
+    monkeypatch.setattr(
+        scanner,
+        "get_configured_model_roots",
+        lambda: [configured_variant, str(offline)],
+    )
+
+    described = scanner.describe_model_roots()
+
+    assert [entry["path"] for entry in described] == [
+        _normalize_path(root),
+        _normalize_path(offline),
+    ]
+    assert described[0]["available"] is True
+    assert described[1]["available"] is False
+
+
+@pytest.mark.asyncio
 async def test_reconcile_reports_root_filtered_out_at_startup(tmp_path: Path, monkeypatch):
     configured_missing = tmp_path / "drive-Z" / "loras"
     scanner, _primary, missing = await _startup_filtered_scanner(
