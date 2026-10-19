@@ -2218,13 +2218,15 @@ export class DownloadManager {
                         <div class="batch-preview-meta">
                             ${ver?.baseModel ? `<span>${ver.baseModel}</span>` : ''}
                             <span>${fileSize} MB</span>
-                            <span class="batch-preview-version-count">
-                                ${translate(
-                                    'modals.download.versionsSelected',
-                                    { count: selectedCount },
-                                    `${selectedCount} version(s) selected`
-                                )}
-                            </span>
+                            ${selectedCount > 1 ? `
+                                <span class="batch-preview-version-count">
+                                    ${translate(
+                                        'modals.download.versionsSelected',
+                                        { count: selectedCount },
+                                        `${selectedCount} version(s) selected`
+                                    )}
+                                </span>
+                            ` : ''}
                             ${existsLocally ? `<span class="batch-preview-local-badge"><i class="fas fa-check"></i> ${localBadgeLabel}</span>` : ''}
                         </div>
                     </div>

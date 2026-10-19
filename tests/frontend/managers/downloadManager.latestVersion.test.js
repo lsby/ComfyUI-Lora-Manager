@@ -245,6 +245,7 @@ describe('DownloadManager latest-version default', () => {
       expect(manager.batchModels[0].selectedVersion.id).toBe(40);
       expect(manager.batchModels[0].selectedVersions.map(version => version.id)).toEqual([40]);
       expect(manager.batchModels[1].selectedVersion.id).toBe(500);
+      expect(document.querySelectorAll('.batch-preview-version-count')).toHaveLength(0);
     });
 
     it('still honours an explicit modelVersionId per URL', async () => {
