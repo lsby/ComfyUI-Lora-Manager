@@ -435,6 +435,7 @@ class Downloader:
         allow_resume: bool = True,
         pause_event: Optional[DownloadStreamControl] = None,
         raise_on_rate_limit: bool = False,
+        max_retries: Optional[int] = None,
     ) -> Tuple[bool, str]:
         """
         Download a file with resumable downloads and retry mechanism
@@ -452,11 +453,16 @@ class Downloader:
                 string, so callers (the model download manager) can build the
                 structured rate-limit result required by the download queue
                 contract. Defaults to the legacy tuple behavior.
+            max_retries: Optional per-call retry override. ``None`` preserves
+                the configured downloader default.
 
         Returns:
             Tuple[bool, str]: (success, save_path or error message)
         """
         retry_count = 0
+        effective_max_retries = (
+            self.max_retries if max_retries is None else max(0, int(max_retries))
+        )
         part_path = save_path + ".part" if allow_resume else save_path
 
         # Prepare headers
@@ -473,7 +479,7 @@ class Downloader:
         total_size = 0
         range_redirect_retry_urls: set[str] = set()
 
-        while retry_count <= self.max_retries:
+        while retry_count <= effective_max_retries:
             try:
                 session = await self.session
                 # Debug log for proxy mode at request time
@@ -495,7 +501,7 @@ class Downloader:
                 request_headers["Accept-Encoding"] = "identity"
 
                 logger.debug(
-                    f"Download attempt {retry_count + 1}/{self.max_retries + 1} from: {url}"
+                    f"Download attempt {retry_count + 1}/{effective_max_retries + 1} from: {url}"
                 )
                 if resume_offset > 0:
                     logger.debug(f"Requesting range from byte {resume_offset}")
@@ -796,7 +802,7 @@ class Downloader:
                                     )
 
                         retry_count += 1
-                        if retry_count <= self.max_retries:
+                        if retry_count <= effective_max_retries:
                             delay = self.base_delay * (2 ** (retry_count - 1))
                             logger.info(
                                 "Retrying download in %s seconds due to integrity check failure",
@@ -889,10 +895,10 @@ class Downloader:
                     )
 
                 logger.warning(
-                    f"Network error during download (attempt {retry_count}/{self.max_retries + 1}): {e}"
+                    f"Network error during download (attempt {retry_count}/{effective_max_retries + 1}): {e}"
                 )
 
-                if retry_count <= self.max_retries:
+                if retry_count <= effective_max_retries:
                     # Calculate delay with exponential backoff
                     delay = self.base_delay * (2 ** (retry_count - 1))
                     logger.info(f"Retrying in {delay} seconds...")
@@ -911,7 +917,7 @@ class Downloader:
                     logger.error(f"Max retries exceeded for download: {e}")
                     return (
                         False,
-                        f"Network error after {self.max_retries + 1} attempts: {str(e)}",
+                        f"Network error after {effective_max_retries + 1} attempts: {str(e)}",
                     )
 
             except DownloadRateLimitError:
@@ -923,7 +929,7 @@ class Downloader:
                 logger.error(f"Unexpected download error: {e}")
                 return False, str(e)
 
-        return False, f"Download failed after {self.max_retries + 1} attempts"
+        return False, f"Download failed after {effective_max_retries + 1} attempts"
 
     async def _dispatch_progress_callback(
         self,

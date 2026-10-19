@@ -285,6 +285,7 @@ class MetadataSyncService:
         file_path: str,
         model_data: Dict[str, Any],
         update_cache_func: Callable[[str, str, Dict[str, Any]], Awaitable[bool]],
+        archive_remote_media: bool = True,
     ) -> tuple[bool, Optional[str]]:
         """Fetch metadata for a model and update both disk and cache state.
 
@@ -539,7 +540,7 @@ class MetadataSyncService:
             await get_model_archive_service().archive_model(
                 file_path,
                 local_metadata,
-                download_remote_media=True,
+                download_remote_media=archive_remote_media,
             )
 
             update_payload = {

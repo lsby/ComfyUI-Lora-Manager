@@ -130,7 +130,7 @@ class BulkMetadataRefreshUseCase:
             payload.update(extra)
             await progress_callback.on_progress(payload)
 
-        await emit("started")
+        await emit("started", phase="metadata")
 
         RATE_LIMIT_ABORT_THRESHOLD = 3
         consecutive_rate_limits = 0
@@ -195,6 +195,7 @@ class BulkMetadataRefreshUseCase:
                     file_path=model["file_path"],
                     model_data=model,
                     update_cache_func=self._service.scanner.update_single_model_cache,
+                    archive_remote_media=False,
                 )
 
                 if not result and error_msg and "Rate limited" in error_msg:
@@ -243,6 +244,7 @@ class BulkMetadataRefreshUseCase:
                 handled_count += 1
                 await emit(
                     "processing",
+                    phase="metadata",
                     processed=processed,
                     success=success,
                     current_name=model.get("model_name", "Unknown"),
@@ -261,15 +263,90 @@ class BulkMetadataRefreshUseCase:
         if needs_resort:
             await cache.resort()
 
-        # Models with complete CivitAI metadata are intentionally skipped by
-        # the fetch queue above. Still use their saved image URLs to repair the
-        # durable local archive when the user explicitly requests metadata.
-        await get_model_archive_service().archive_existing(
-            cache.raw_data,
-            download_remote_media=True,
-        )
+        archive_summary: Dict[str, Any] = {
+            "archived": 0,
+            "skipped": 0,
+            "processed": 0,
+            "total": 0,
+            "media_downloaded": 0,
+            "media_failed": 0,
+            "remote_media_suspended": False,
+            "cancelled": False,
+        }
+        archive_service = get_model_archive_service()
+        if archive_service.enabled:
+            archive_total = len(cache.raw_data)
+            await emit(
+                "archive_started",
+                phase="archive",
+                archive_processed=0,
+                archive_total=archive_total,
+                archive_success=0,
+                archive_skipped=0,
+                media_downloaded=0,
+                media_failed=0,
+            )
 
-        await emit("completed", processed=processed, success=success)
+            async def report_archive_progress(payload: Dict[str, Any]) -> None:
+                await emit(
+                    "archive_processing",
+                    phase="archive",
+                    archive_processed=payload["processed"],
+                    archive_total=payload["total"],
+                    archive_success=payload["archived"],
+                    archive_skipped=payload["skipped"],
+                    media_downloaded=payload["media_downloaded"],
+                    media_failed=payload["media_failed"],
+                    remote_media_suspended=payload["remote_media_suspended"],
+                    current_name=payload["current_name"],
+                )
+
+            # Models with complete CivitAI metadata are intentionally skipped
+            # by the fetch queue above. Repair all of their durable archives in
+            # a separately reported, cancellable phase.
+            archive_summary = await archive_service.archive_existing(
+                cache.raw_data,
+                download_remote_media=True,
+                cancel_check=self._service.scanner.is_cancelled,
+                progress_callback=report_archive_progress,
+            )
+            if archive_summary["cancelled"]:
+                await emit(
+                    "cancelled",
+                    phase="archive",
+                    archive_processed=archive_summary["processed"],
+                    archive_total=archive_summary["total"],
+                    archive_success=archive_summary["archived"],
+                    archive_skipped=archive_summary["skipped"],
+                    media_downloaded=archive_summary["media_downloaded"],
+                    media_failed=archive_summary["media_failed"],
+                )
+                return {
+                    "success": False,
+                    "message": "Operation cancelled during model archive repair",
+                    "processed": processed,
+                    "updated": success,
+                    "total": total_models,
+                    "failures": failures,
+                    "failure_count": len(failures),
+                    "skipped_count": skipped_count,
+                    "archive": archive_summary,
+                    "elapsed_seconds": int(time.monotonic() - start_time),
+                }
+
+        await emit(
+            "completed",
+            phase="complete",
+            processed=processed,
+            success=success,
+            archive_processed=archive_summary["processed"],
+            archive_total=archive_summary["total"],
+            archive_success=archive_summary["archived"],
+            archive_skipped=archive_summary["skipped"],
+            media_downloaded=archive_summary["media_downloaded"],
+            media_failed=archive_summary["media_failed"],
+            remote_media_suspended=archive_summary["remote_media_suspended"],
+        )
 
         message = (
             "Successfully updated "
@@ -282,7 +359,7 @@ class BulkMetadataRefreshUseCase:
                 + ")"
             )
 
-        return {"success": True, "message": message, "processed": processed, "updated": success, "total": total_models, "failures": failures, "failure_count": len(failures), "skipped_count": skipped_count, "offline_skipped": offline_skipped, "elapsed_seconds": int(time.monotonic() - start_time)}
+        return {"success": True, "message": message, "processed": processed, "updated": success, "total": total_models, "failures": failures, "failure_count": len(failures), "skipped_count": skipped_count, "offline_skipped": offline_skipped, "archive": archive_summary, "elapsed_seconds": int(time.monotonic() - start_time)}
 
     def _offline_root_details(self) -> List[Dict[str, str]]:
         """Configured roots whose directory cannot be read right now.

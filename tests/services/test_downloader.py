@@ -164,6 +164,30 @@ async def test_download_file_fails_when_zero_bytes(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_download_file_accepts_per_call_retry_override(tmp_path):
+    target_path = tmp_path / "model" / "file.bin"
+    target_path.parent.mkdir()
+    responses = [
+        lambda: FakeResponse(
+            status=200,
+            headers={"content-length": "10"},
+            chunks=[b"abc"],
+        )
+    ]
+    downloader = _build_downloader(responses, max_retries=5)
+
+    success, message = await downloader.download_file(
+        "https://example.com/file",
+        str(target_path),
+        max_retries=0,
+    )
+
+    assert success is False
+    assert "mismatch" in message.lower()
+    assert _session(downloader)._get_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_download_file_succeeds_when_sizes_match(tmp_path):
     target_path = tmp_path / "model" / "file.bin"
     target_path.parent.mkdir()

@@ -9,9 +9,10 @@ import json
 import logging
 import os
 import shutil
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Awaitable, Callable, Dict, Iterable, Optional
 from urllib.parse import urlparse
 
 from .downloader import get_downloader
@@ -26,6 +27,10 @@ _MEDIA_EXTENSIONS = {
     ".apng", ".avif", ".gif", ".jpeg", ".jpg", ".m4v", ".mov",
     ".mp4", ".png", ".webm", ".webp",
 }
+_REMOTE_FAILURE_THRESHOLD = 3
+
+CancelCheck = Callable[[], bool]
+ArchiveProgressCallback = Callable[[Dict[str, Any]], Awaitable[None]]
 
 
 def _utc_timestamp() -> str:
@@ -118,6 +123,7 @@ class ModelArchiveService:
         metadata: Dict[str, Any],
         *,
         download_remote_media: bool = False,
+        cancel_check: Optional[CancelCheck] = None,
     ) -> Dict[str, Any]:
         """Archive one model without allowing archive failures to alter its sidecar."""
 
@@ -137,6 +143,7 @@ class ModelArchiveService:
                     file_path,
                     metadata,
                     download_remote_media=download_remote_media,
+                    cancel_check=cancel_check,
                 )
             except Exception as exc:  # pragma: no cover - defensive isolation
                 logger.warning("Failed to archive metadata for %s: %s", file_path, exc, exc_info=True)
@@ -148,6 +155,7 @@ class ModelArchiveService:
         metadata: Dict[str, Any],
         *,
         download_remote_media: bool,
+        cancel_check: Optional[CancelCheck],
     ) -> Dict[str, Any]:
         model_dir = self._model_dir(metadata, file_path)
         snapshots_dir = model_dir / "snapshots"
@@ -207,8 +215,15 @@ class ModelArchiveService:
         copied = self._copy_local_media(metadata, media_dir, manifest)
         downloaded = 0
         failed = 0
+        cancelled = False
+        network_failed = False
         if download_remote_media and self._settings.get("model_archive_download_media", True):
-            downloaded, failed = await self._download_remote_media(metadata, media_dir, manifest)
+            downloaded, failed, cancelled, network_failed = await self._download_remote_media(
+                metadata,
+                media_dir,
+                manifest,
+                cancel_check=cancel_check,
+            )
         _atomic_write_json(manifest_path, manifest)
         return {
             "archived": True,
@@ -217,6 +232,8 @@ class ModelArchiveService:
             "local_media_copied": copied,
             "remote_media_downloaded": downloaded,
             "remote_media_failed": failed,
+            "remote_media_cancelled": cancelled,
+            "remote_media_network_failed": network_failed,
         }
 
     @staticmethod
@@ -307,16 +324,23 @@ class ModelArchiveService:
         metadata: Dict[str, Any],
         media_dir: Path,
         manifest: Dict[str, Any],
-    ) -> tuple[int, int]:
+        *,
+        cancel_check: Optional[CancelCheck] = None,
+    ) -> tuple[int, int, bool, bool]:
         civitai = metadata.get("civitai") or {}
         images = civitai.get("images") or [] if isinstance(civitai, dict) else []
         if not isinstance(images, list):
-            return 0, 0
+            return 0, 0, False, False
         media_records = manifest.setdefault("media", [])
         downloader = await get_downloader()
         downloaded = 0
         failed = 0
+        cancelled = False
+        network_failed = False
         for index, image in enumerate(images):
+            if cancel_check is not None and cancel_check():
+                cancelled = True
+                break
             if not isinstance(image, dict):
                 continue
             url = str(image.get("url") or "").strip()
@@ -337,7 +361,25 @@ class ModelArchiveService:
             )[:64]
             extension = _safe_extension(url, media_type)
             target = media_dir / f"remote-{index:03d}-{safe_identifier or index}{extension}"
-            success, result = await downloader.download_file(url, str(target), use_auth=False)
+            download_task = asyncio.create_task(
+                downloader.download_file(
+                    url,
+                    str(target),
+                    use_auth=False,
+                    max_retries=0,
+                )
+            )
+            while not download_task.done():
+                await asyncio.wait({download_task}, timeout=0.25)
+                if cancel_check is not None and cancel_check():
+                    download_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await download_task
+                    cancelled = True
+                    break
+            if cancelled:
+                break
+            success, result = await download_task
             record = existing or {"kind": "remote_example", "remote_url": url}
             record.update(
                 {
@@ -352,34 +394,102 @@ class ModelArchiveService:
             else:
                 record["error"] = str(result)
                 failed += 1
+                error_text = str(result).lower()
+                network_failed = any(
+                    marker in error_text
+                    for marker in (
+                        "network error",
+                        "cannot connect",
+                        "connection refused",
+                        "timed out",
+                        "timeout",
+                    )
+                )
                 if target.exists():
                     target.unlink()
             if existing is None:
                 media_records.append(record)
-        return downloaded, failed
+            if network_failed:
+                # A broken image host would otherwise repeat the same timeout
+                # for every URL on this model. The next model provides the
+                # next circuit-breaker sample.
+                break
+        return downloaded, failed, cancelled, network_failed
 
     async def archive_existing(
         self,
         models: Iterable[Dict[str, Any]],
         *,
         download_remote_media: bool = False,
-    ) -> Dict[str, int]:
+        cancel_check: Optional[CancelCheck] = None,
+        progress_callback: Optional[ArchiveProgressCallback] = None,
+    ) -> Dict[str, Any]:
         """Repair archives from existing metadata, optionally fetching media."""
 
+        model_list = list(models)
+        total = len(model_list)
         archived = 0
         skipped = 0
-        for model in models:
+        processed = 0
+        media_downloaded = 0
+        media_failed = 0
+        consecutive_network_failures = 0
+        remote_media_suspended = False
+        cancelled = False
+        for model in model_list:
+            if cancel_check is not None and cancel_check():
+                cancelled = True
+                break
             file_path = str(model.get("file_path") or "")
             result = await self.archive_model(
                 file_path,
                 dict(model),
-                download_remote_media=download_remote_media,
+                download_remote_media=download_remote_media and not remote_media_suspended,
+                cancel_check=cancel_check,
             )
+            processed += 1
             if result.get("archived"):
                 archived += 1
             else:
                 skipped += 1
-        return {"archived": archived, "skipped": skipped}
+            media_downloaded += int(result.get("remote_media_downloaded") or 0)
+            media_failed += int(result.get("remote_media_failed") or 0)
+            if result.get("remote_media_network_failed"):
+                consecutive_network_failures += 1
+            else:
+                consecutive_network_failures = 0
+            if consecutive_network_failures >= _REMOTE_FAILURE_THRESHOLD:
+                remote_media_suspended = True
+            if result.get("remote_media_cancelled"):
+                cancelled = True
+
+            if progress_callback is not None:
+                await progress_callback(
+                    {
+                        "processed": processed,
+                        "total": total,
+                        "archived": archived,
+                        "skipped": skipped,
+                        "media_downloaded": media_downloaded,
+                        "media_failed": media_failed,
+                        "remote_media_suspended": remote_media_suspended,
+                        "current_name": model.get("model_name")
+                        or model.get("file_name")
+                        or Path(file_path).stem,
+                    }
+                )
+            if cancelled:
+                break
+        return {
+            "archived": archived,
+            "skipped": skipped,
+            "processed": processed,
+            "total": total,
+            "media_downloaded": media_downloaded,
+            "media_failed": media_failed,
+            "remote_media_suspended": remote_media_suspended,
+            "cancelled": cancelled,
+        }
 
 
 _MODEL_ARCHIVE_SERVICE: Optional[ModelArchiveService] = None

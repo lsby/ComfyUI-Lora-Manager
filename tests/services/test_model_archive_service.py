@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -161,4 +162,90 @@ async def test_archive_existing_never_downloads_remote_media(tmp_path, monkeypat
     service = ModelArchiveService(_Settings(tmp_path))
     result = await service.archive_existing([_metadata(model_path, preview_path)])
 
-    assert result == {"archived": 1, "skipped": 0}
+    assert result["archived"] == 1
+    assert result["skipped"] == 0
+    assert result["processed"] == 1
+    assert result["cancelled"] is False
+
+
+@pytest.mark.asyncio
+async def test_archive_existing_cancels_an_in_flight_media_download(tmp_path, monkeypatch):
+    model_path = tmp_path / "model.safetensors"
+    preview_path = tmp_path / "preview.webp"
+    model_path.write_bytes(b"model")
+    preview_path.write_bytes(b"preview")
+    cancel_requested = False
+
+    class _HangingDownloader:
+        async def download_file(self, _url, _save_path, **kwargs):
+            assert kwargs["max_retries"] == 0
+            await asyncio.Event().wait()
+
+    async def _get_downloader():
+        return _HangingDownloader()
+
+    monkeypatch.setattr(archive_module, "get_downloader", _get_downloader)
+    monkeypatch.setattr(archive_module, "get_model_folder", lambda _hash: "")
+
+    service = ModelArchiveService(_Settings(tmp_path))
+    task = asyncio.create_task(
+        service.archive_existing(
+            [_metadata(model_path, preview_path)],
+            download_remote_media=True,
+            cancel_check=lambda: cancel_requested,
+        )
+    )
+    await asyncio.sleep(0.05)
+    cancel_requested = True
+    result = await asyncio.wait_for(task, timeout=1)
+
+    assert result["cancelled"] is True
+    assert result["processed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_archive_existing_suspends_remote_media_after_network_failures(
+    tmp_path, monkeypatch
+):
+    calls = 0
+
+    class _OfflineDownloader:
+        async def download_file(self, _url, _save_path, **kwargs):
+            nonlocal calls
+            calls += 1
+            assert kwargs["max_retries"] == 0
+            return False, "Network error after 1 attempts: timed out"
+
+    async def _get_downloader():
+        return _OfflineDownloader()
+
+    monkeypatch.setattr(archive_module, "get_downloader", _get_downloader)
+    monkeypatch.setattr(archive_module, "get_model_folder", lambda _hash: "")
+
+    models = []
+    for index in range(5):
+        model_path = tmp_path / f"model-{index}.safetensors"
+        preview_path = tmp_path / f"model-{index}.webp"
+        model_path.write_bytes(b"model")
+        preview_path.write_bytes(b"preview")
+        metadata = _metadata(model_path, preview_path)
+        metadata["sha256"] = f"{index:064x}"
+        models.append(metadata)
+
+    progress = []
+
+    async def _progress(payload):
+        progress.append(payload)
+
+    service = ModelArchiveService(_Settings(tmp_path))
+    result = await service.archive_existing(
+        models,
+        download_remote_media=True,
+        progress_callback=_progress,
+    )
+
+    assert calls == 3
+    assert result["archived"] == 5
+    assert result["media_failed"] == 3
+    assert result["remote_media_suspended"] is True
+    assert progress[-1]["processed"] == 5

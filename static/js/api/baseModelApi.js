@@ -804,19 +804,46 @@ export class BaseModelApiClient {
 
                         switch (data.status) {
                             case 'started':
-                                loading.setStatus('Starting metadata fetch...');
+                                loading.setProgress(0);
+                                loading.setStatus(`Metadata: preparing ${data.total || 0} models...`);
                                 break;
 
                             case 'processing': {
                                 const handled = data.handled || data.processed;
-                                const percent = ((handled / data.total) * 100).toFixed(1);
+                                const percent = data.total > 0 ? ((handled / data.total) * 100).toFixed(1) : 100;
                                 loading.setProgress(percent);
-                                let statusText = `Processing (${handled}/${data.total}) ${data.current_name || ''}`;
+                                let statusText = `Metadata (${handled}/${data.total}) ${data.current_name || ''} | ✅ ${data.success || 0}`;
                                 if (data.failure_count > 0) {
                                     statusText += ` | ❌ ${data.failure_count} failed`;
                                 }
                                 if (data.skipped_count > 0) {
                                     statusText += ` | ⏭️ ${data.skipped_count} skipped`;
+                                }
+                                loading.setStatus(statusText);
+                                break;
+                            }
+
+                            case 'archive_started':
+                                loading.setProgress(0);
+                                loading.setStatus(`Archive: preparing ${data.archive_total || 0} models...`);
+                                break;
+
+                            case 'archive_processing': {
+                                const archiveProcessed = data.archive_processed || 0;
+                                const archiveTotal = data.archive_total || 0;
+                                const percent = archiveTotal > 0 ? ((archiveProcessed / archiveTotal) * 100).toFixed(1) : 100;
+                                loading.setProgress(percent);
+                                let statusText = `Archive (${archiveProcessed}/${archiveTotal}) ${data.current_name || ''}`;
+                                statusText += ` | ✅ ${data.archive_success || 0} models`;
+                                statusText += ` | 📥 ${data.media_downloaded || 0} media`;
+                                if (data.media_failed > 0) {
+                                    statusText += ` | ❌ ${data.media_failed} media failed`;
+                                }
+                                if (data.archive_skipped > 0) {
+                                    statusText += ` | ⏭️ ${data.archive_skipped} skipped`;
+                                }
+                                if (data.remote_media_suspended) {
+                                    statusText += ' | ⚠️ remote media paused after network failures';
                                 }
                                 loading.setStatus(statusText);
                                 break;
@@ -831,6 +858,13 @@ export class BaseModelApiClient {
                                 if (data.skipped_count > 0) {
                                     summaryText += ` | ⏭️ ${data.skipped_count} skipped`;
                                 }
+                                if (data.archive_total > 0) {
+                                    summaryText += ` | Archive ✅ ${data.archive_success || 0}/${data.archive_total}`;
+                                    summaryText += ` | Media 📥 ${data.media_downloaded || 0}`;
+                                    if (data.media_failed > 0) {
+                                        summaryText += ` ❌ ${data.media_failed}`;
+                                    }
+                                }
                                 summaryText += ` (⏱ ${data.elapsed_seconds || '?'}s)`;
                                 loading.setStatus(summaryText);
                                 resolve(data);
@@ -838,7 +872,16 @@ export class BaseModelApiClient {
                             }
 
                             case 'cancelled':
-                                loading.setStatus('Operation cancelled by user');
+                                if (data.phase === 'archive') {
+                                    loading.setStatus(`Cancelled during archive (${data.archive_processed || 0}/${data.archive_total || 0}) | ✅ ${data.archive_success || 0} models | 📥 ${data.media_downloaded || 0} media | ❌ ${data.media_failed || 0} failed`);
+                                } else {
+                                    loading.setStatus(`Cancelled during metadata (${data.handled || data.processed || 0}/${data.total || 0}) | ✅ ${data.success || 0} | ❌ ${data.failure_count || 0}`);
+                                }
+                                resolve(data);
+                                break;
+
+                            case 'rate_limited':
+                                loading.setStatus(`Stopped: provider rate limit after ${data.processed || 0}/${data.total || 0} models | ✅ ${data.success || 0} | ❌ ${data.failure_count || 0}`);
                                 resolve(data);
                                 break;
 

@@ -235,10 +235,83 @@ async def test_bulk_metadata_refresh_emits_progress_and_updates_cache(
     assert progress.events[0]["status"] == "started"
     assert progress.events[-1]["status"] == "completed"
     assert metadata_sync.calls
+    assert metadata_sync.calls[0]["archive_remote_media"] is False
     assert metadata_sync.calls[0]["model_data"]["extra"] == "value"
     assert scanner._cache.raw_data[0]["extra"] == "value"
     assert hydration_calls == ["model1.safetensors"]
     assert scanner._cache.resort_calls == 1
+
+
+async def test_bulk_metadata_refresh_reports_archive_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scanner = MockScanner()
+    scanner._cache.raw_data = [
+        {
+            "file_path": "model1.safetensors",
+            "sha256": "hash",
+            "model_name": "Demo",
+            "civitai": {"id": 1, "images": [{"url": "image.png"}]},
+        }
+    ]
+    service = MockModelService(scanner)
+    metadata_sync = StubMetadataSync()
+    progress = ProgressCollector()
+
+    class _ArchiveService:
+        enabled = True
+
+        async def archive_existing(self, models, **kwargs):
+            assert list(models) == scanner._cache.raw_data
+            assert kwargs["download_remote_media"] is True
+            assert kwargs["cancel_check"]() is False
+            await kwargs["progress_callback"](
+                {
+                    "processed": 1,
+                    "total": 1,
+                    "archived": 1,
+                    "skipped": 0,
+                    "media_downloaded": 2,
+                    "media_failed": 1,
+                    "remote_media_suspended": False,
+                    "current_name": "Demo",
+                }
+            )
+            return {
+                "archived": 1,
+                "skipped": 0,
+                "processed": 1,
+                "total": 1,
+                "media_downloaded": 2,
+                "media_failed": 1,
+                "remote_media_suspended": False,
+                "cancelled": False,
+            }
+
+    monkeypatch.setattr(
+        "py.services.use_cases.bulk_metadata_refresh_use_case.get_model_archive_service",
+        lambda: _ArchiveService(),
+    )
+    use_case = BulkMetadataRefreshUseCase(
+        service=service,
+        metadata_sync=metadata_sync,
+        settings_service=StubSettings(),
+        logger=logging.getLogger("test"),
+    )
+
+    result = await use_case.execute_with_error_handling(progress_callback=progress)
+
+    statuses = [event["status"] for event in progress.events]
+    assert statuses == [
+        "started",
+        "archive_started",
+        "archive_processing",
+        "completed",
+    ]
+    assert progress.events[-1]["archive_success"] == 1
+    assert progress.events[-1]["media_downloaded"] == 2
+    assert progress.events[-1]["media_failed"] == 1
+    assert result["archive"]["archived"] == 1
 
 
 async def test_bulk_metadata_refresh_reports_errors() -> None:
