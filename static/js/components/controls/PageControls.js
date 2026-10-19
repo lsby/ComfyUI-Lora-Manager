@@ -443,6 +443,7 @@ export class PageControls {
                 'fetch-all': { scope: 'all', force: false },
                 'fetch-selected-force': { scope: 'selected', force: true },
                 'fetch-all-force': { scope: 'all', force: true },
+                'fetch-retry-failed': { retryFailed: true },
             };
             if (!optionsByAction[action]) return;
             item.addEventListener('click', (event) => {
@@ -623,13 +624,23 @@ export class PageControls {
     /**
      * Fetch metadata from Civitai (available for both LoRAs and Checkpoints)
      */
-    async fetchFromCivitai({ scope = 'all', force = false } = {}) {
+    async fetchFromCivitai({ scope = 'all', force = false, retryFailed = false } = {}) {
         if (!this.api) {
             console.error('API methods not registered');
             return;
         }
 
-        const filePaths = scope === 'selected' ? Array.from(state.selectedModels || []) : null;
+        let filePaths = scope === 'selected' ? Array.from(state.selectedModels || []) : null;
+        if (retryFailed) {
+            filePaths = getModelApiClient().getRetryableMetadataFailures();
+            if (filePaths.length === 0) {
+                showToast('toast.controls.noFailedMetadataFetches', {}, 'info');
+                return;
+            }
+            scope = 'selected';
+            force = true;
+        }
+
         if (scope === 'selected' && filePaths.length === 0) {
             showToast('toast.controls.selectModelsFirst', {}, 'info');
             return;

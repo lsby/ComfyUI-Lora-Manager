@@ -995,7 +995,8 @@
                 "selected": "[TODO: Translate] Fetch Selected",
                 "all": "[TODO: Translate] Fetch All",
                 "forceSelected": "[TODO: Translate] Force Fetch Selected",
-                "forceAll": "[TODO: Translate] Force Fetch All"
+                "forceAll": "[TODO: Translate] Force Fetch All",
+                "retryFailed": "[TODO: Translate] Retry Last Failures"
             },
             "download": {
                 "title": "Télécharger depuis une URL",
@@ -2841,6 +2842,7 @@
             "refreshFailed": "Échec de {action} {pageType} : {message}",
             "fetchMetadataFailed": "Échec de la récupération des métadonnées : {message}",
             "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
+            "noFailedMetadataFetches": "[TODO: Translate] There are no failed metadata fetches to retry.",
             "clearFilterFailed": "Échec de l'effacement du filtre personnalisé : {message}"
         },
         "contextMenu": {

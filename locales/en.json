@@ -995,7 +995,8 @@
         "selected": "Fetch Selected",
         "all": "Fetch All",
         "forceSelected": "Force Fetch Selected",
-        "forceAll": "Force Fetch All"
+        "forceAll": "Force Fetch All",
+        "retryFailed": "Retry Last Failures"
       },
       "download": {
         "title": "Download from URL",
@@ -2841,6 +2842,7 @@
       "refreshFailed": "Failed to {action} {pageType}: {message}",
       "fetchMetadataFailed": "Failed to fetch metadata: {message}",
       "selectModelsFirst": "Select one or more models first.",
+      "noFailedMetadataFetches": "There are no failed metadata fetches to retry.",
       "clearFilterFailed": "Failed to clear custom filter: {message}"
     },
     "contextMenu": {

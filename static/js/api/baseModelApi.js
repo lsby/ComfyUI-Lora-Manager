@@ -1,7 +1,7 @@
 import { state, getCurrentPageState } from '../state/index.js';
 import { showToast } from '../utils/uiHelpers.js';
 import { translate } from '../utils/i18nHelpers.js';
-import { getStorageItem, getSessionItem, removeSessionItem, saveMapToStorage } from '../utils/storageHelpers.js';
+import { getStorageItem, setStorageItem, getSessionItem, removeSessionItem, saveMapToStorage } from '../utils/storageHelpers.js';
 import {
     getCompleteApiConfig,
     getCurrentModelType,
@@ -940,6 +940,7 @@ export class BaseModelApiClient {
 
                 // Show result summary with failure details
                 if (finalData) {
+                    this._recordMetadataFetchResult(finalData);
                     this._showMetadataRefreshResult(finalData);
                 }
             } catch (error) {
@@ -954,6 +955,48 @@ export class BaseModelApiClient {
             initialMessage: 'Connecting...',
             completionMessage: 'Metadata update complete'
         });
+    }
+
+    _getMetadataFetchReportStorageKey() {
+        return `${this.modelType}_last_metadata_fetch_report`;
+    }
+
+    _recordMetadataFetchResult(data) {
+        const report = data?.report;
+        if (!report || !Array.isArray(report.items)) return;
+
+        const storedReport = {
+            ...report,
+            operation_status: data.status || 'completed',
+            recorded_at: new Date().toISOString(),
+            items: report.items.map((item) => ({
+                name: item.name || '',
+                file_path: item.file_path || '',
+                status: item.status || 'unknown',
+                detail: item.detail || '',
+            })),
+        };
+
+        try {
+            setStorageItem(this._getMetadataFetchReportStorageKey(), storedReport);
+        } catch (error) {
+            console.warn('Failed to save metadata fetch report:', error);
+        }
+    }
+
+    getLastMetadataFetchReport() {
+        return getStorageItem(this._getMetadataFetchReportStorageKey(), null);
+    }
+
+    getRetryableMetadataFailures() {
+        const report = this.getLastMetadataFetchReport();
+        if (!report || !Array.isArray(report.items)) return [];
+
+        return [...new Set(
+            report.items
+                .filter((item) => item.status === 'failed' && item.file_path)
+                .map((item) => item.file_path)
+        )];
     }
 
     _showMetadataRefreshResult(data) {

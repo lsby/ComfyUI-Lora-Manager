@@ -28,6 +28,8 @@ const restoreProgressBarMock = vi.fn();
 const setProgressMock = vi.fn();
 const setStatusMock = vi.fn();
 const resetAndReloadMock = vi.fn();
+const getStorageItemMock = vi.fn();
+const setStorageItemMock = vi.fn();
 
 vi.mock(STATE_MODULE, () => ({
   state: {
@@ -60,7 +62,8 @@ vi.mock(I18N_MODULE, () => ({
 }));
 
 vi.mock(STORAGE_MODULE, () => ({
-  getStorageItem: vi.fn(),
+  getStorageItem: getStorageItemMock,
+  setStorageItem: setStorageItemMock,
   getSessionItem: vi.fn(),
   removeSessionItem: vi.fn(),
   saveMapToStorage: vi.fn(),
@@ -133,6 +136,8 @@ describe('BaseModelApiClient.refreshModels scan progress', () => {
     setProgressMock.mockReset();
     setStatusMock.mockReset();
     resetAndReloadMock.mockReset();
+    getStorageItemMock.mockReset();
+    setStorageItemMock.mockReset();
     FakeWebSocket.instances = [];
     FakeWebSocket.failNextConnection = false;
     vi.stubGlobal('WebSocket', FakeWebSocket);
@@ -508,6 +513,68 @@ describe('BaseModelApiClient.refreshModels scan progress', () => {
 
     expect(showToastMock).toHaveBeenCalledWith('toast.api.operationCancelled', {}, 'info');
     expect(resetAndReloadMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('BaseModelApiClient metadata fetch report storage', () => {
+  beforeEach(() => {
+    getStorageItemMock.mockReset();
+    setStorageItemMock.mockReset();
+  });
+
+  it('records the latest per-model result with retryable file paths', async () => {
+    const client = await createClient();
+
+    client._recordMetadataFetchResult({
+      status: 'completed',
+      report: {
+        successful: 2,
+        invalid: 1,
+        failed: 1,
+        items: [
+          { name: 'ok', file_path: 'C:/models/ok.safetensors', status: 'updated' },
+          { name: 'gone', file_path: 'C:/models/gone.safetensors', status: 'invalid', detail: 'not found' },
+          { name: 'retry', file_path: 'C:/models/retry.safetensors', status: 'failed', detail: 'write failed' },
+        ],
+      },
+    });
+
+    expect(setStorageItemMock).toHaveBeenCalledWith(
+      'loras_last_metadata_fetch_report',
+      expect.objectContaining({
+        successful: 2,
+        invalid: 1,
+        failed: 1,
+        operation_status: 'completed',
+        recorded_at: expect.any(String),
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            file_path: 'C:/models/retry.safetensors',
+            status: 'failed',
+          }),
+        ]),
+      })
+    );
+  });
+
+  it('returns only unique failed paths and excludes invalid models', async () => {
+    const client = await createClient();
+    getStorageItemMock.mockReturnValue({
+      items: [
+        { file_path: 'C:/models/retry.safetensors', status: 'failed' },
+        { file_path: 'C:/models/retry.safetensors', status: 'failed' },
+        { file_path: 'C:/models/gone.safetensors', status: 'invalid' },
+        { file_path: 'C:/models/ok.safetensors', status: 'updated' },
+      ],
+    });
+
+    expect(client.getRetryableMetadataFailures()).toEqual([
+      'C:/models/retry.safetensors',
+    ]);
+    expect(getStorageItemMock).toHaveBeenCalledWith(
+      'loras_last_metadata_fetch_report',
+      null
+    );
   });
 });
 

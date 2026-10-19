@@ -3,12 +3,14 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 const loadMoreWithVirtualScrollMock = vi.fn();
 const refreshModelsMock = vi.fn();
 const fetchCivitaiMetadataMock = vi.fn();
+const getRetryableMetadataFailuresMock = vi.fn();
 const resetAndReloadMock = vi.fn();
 const getModelApiClientMock = vi.fn();
 const apiClientMock = {
   loadMoreWithVirtualScroll: loadMoreWithVirtualScrollMock,
   refreshModels: refreshModelsMock,
   fetchCivitaiMetadata: fetchCivitaiMetadataMock,
+  getRetryableMetadataFailures: getRetryableMetadataFailuresMock,
 };
 
 const showToastMock = vi.fn();
@@ -76,6 +78,7 @@ beforeEach(() => {
   loadMoreWithVirtualScrollMock.mockResolvedValue(undefined);
   refreshModelsMock.mockResolvedValue(undefined);
   fetchCivitaiMetadataMock.mockResolvedValue(undefined);
+  getRetryableMetadataFailuresMock.mockReturnValue([]);
   resetAndReloadMock.mockResolvedValue(undefined);
   getModelApiClientMock.mockReturnValue(apiClientMock);
   performModelUpdateCheckMock.mockResolvedValue({ status: 'success', displayName: 'LoRA', records: [] });
@@ -152,6 +155,7 @@ function renderControlsDom(pageKey) {
               <div class="dropdown-item" data-action="fetch-all"></div>
               <div class="dropdown-item" data-action="fetch-selected-force"></div>
               <div class="dropdown-item" data-action="fetch-all-force"></div>
+              <div class="dropdown-item" data-action="fetch-retry-failed"></div>
             </div>
           </div>
           <div class="control-group">
@@ -1280,6 +1284,38 @@ describe('PageControls action keyboard shortcuts', () => {
     expect(fetchCivitaiMetadataMock).not.toHaveBeenCalled();
     expect(showToastMock).toHaveBeenCalledWith(
       'toast.controls.selectModelsFirst', {}, 'info'
+    );
+  });
+
+  it('retries only failures recorded by the last metadata fetch', async () => {
+    await setupLorasControls();
+    getRetryableMetadataFailuresMock.mockReturnValue([
+      'C:/models/failed-one.safetensors',
+      'C:/models/failed-two.safetensors',
+    ]);
+
+    document.querySelector('[data-action="fetch-retry-failed"]').click();
+    await Promise.resolve();
+
+    expect(fetchCivitaiMetadataMock).toHaveBeenCalledWith({
+      scope: 'selected',
+      force: true,
+      filePaths: [
+        'C:/models/failed-one.safetensors',
+        'C:/models/failed-two.safetensors',
+      ],
+    });
+  });
+
+  it('does not retry when the last metadata fetch has no failures', async () => {
+    await setupLorasControls();
+
+    document.querySelector('[data-action="fetch-retry-failed"]').click();
+    await Promise.resolve();
+
+    expect(fetchCivitaiMetadataMock).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith(
+      'toast.controls.noFailedMetadataFetches', {}, 'info'
     );
   });
 
