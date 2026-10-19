@@ -127,6 +127,9 @@ class BaseModelMetadata:
     )
     metadata_source: Optional[str] = None  # Last provider that supplied metadata
     last_checked_at: float = 0  # Last checked timestamp
+    metadata_fetch_status: Optional[str] = None  # valid | invalid | failed
+    metadata_fetch_status_detail: str = ""
+    metadata_fetch_status_at: Optional[str] = None
     hash_status: str = "completed"  # Hash calculation status: pending | calculating | completed | failed
     autov3: Optional[str] = None  # CivitAI AutoV3 hash (12-char lowercase hex); "" = checked but unavailable, None = not checked
     quantization: Optional[str] = None  # Content-detected quantization ("Q4_K_M"/"FP8"/...); "" = checked but unavailable, None = not checked

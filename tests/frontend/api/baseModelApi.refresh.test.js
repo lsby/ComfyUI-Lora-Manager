@@ -33,6 +33,9 @@ const setStorageItemMock = vi.fn();
 
 vi.mock(STATE_MODULE, () => ({
   state: {
+    global: {
+      settings: { group_by_model: false },
+    },
     loadingManager: {
       show: showMock,
       showCancelButton: showCancelButtonMock,
@@ -125,6 +128,27 @@ async function createClient() {
 async function flushMicrotasks() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+describe('BaseModelApiClient metadata status query', () => {
+  it('passes the persistent status filter to the backend', async () => {
+    const client = await createClient();
+    const params = client._buildQueryParams(
+      { page: '1', page_size: '20' },
+      {
+        viewMode: 'normal',
+        activeFolder: null,
+        showFavoritesOnly: false,
+        showUpdateAvailableOnly: false,
+        metadataFetchStatusFilter: 'failed',
+        activeLetterFilter: null,
+        filters: {},
+        searchOptions: { recursive: false },
+      }
+    );
+
+    expect(params.get('metadata_status')).toBe('failed');
+  });
+});
 
 describe('BaseModelApiClient.refreshModels scan progress', () => {
   beforeEach(() => {
@@ -581,76 +605,6 @@ describe('BaseModelApiClient metadata fetch report storage', () => {
     );
   });
 
-  it('counts success as updated plus unchanged while preserving detailed statuses', async () => {
-    const client = await createClient();
-    getStorageItemMock.mockReturnValue({
-      items: [
-        { file_path: 'C:/models/a.safetensors', status: 'updated' },
-        { file_path: 'C:/models/b.safetensors', status: 'unchanged' },
-        { file_path: 'C:/models/c.safetensors', status: 'invalid' },
-        { file_path: 'C:/models/d.safetensors', status: 'failed' },
-        { file_path: 'C:/models/e.safetensors', status: 'skipped' },
-      ],
-    });
-
-    expect(client.getMetadataFetchStatusCounts()).toEqual({
-      all: 5,
-      success: 2,
-      updated: 1,
-      unchanged: 1,
-      invalid: 1,
-      failed: 1,
-      skipped: 1,
-    });
-  });
-
-  it('filters the complete backend result before applying frontend pagination', async () => {
-    const client = await createClient();
-    getStorageItemMock.mockReturnValue({
-      recorded_at: '2026-10-19T12:00:00Z',
-      items: [
-        { file_path: 'C:\\models\\b.safetensors', status: 'failed' },
-        { file_path: 'C:/models/c.safetensors', status: 'failed' },
-      ],
-    });
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          items: [
-            { file_path: 'C:/models/a.safetensors' },
-            { file_path: 'C:/models/b.safetensors' },
-          ],
-          folders: ['models'],
-          total_pages: 2,
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          items: [{ file_path: 'C:/models/c.safetensors' }],
-          total_pages: 2,
-        }),
-      });
-
-    const result = await client._fetchMetadataStatusPage({
-      endpoint: '/api/lm/loras',
-      params: new URLSearchParams('sort_by=name%3Aasc'),
-      page: 1,
-      pageSize: 1,
-      status: 'failed',
-    });
-
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({
-      items: [{ file_path: 'C:/models/b.safetensors' }],
-      totalItems: 2,
-      totalPages: 2,
-      currentPage: 1,
-      hasMore: true,
-      folders: ['models'],
-    });
-  });
 });
 
 describe('createScanEtaTracker / formatScanRemainingTime', () => {

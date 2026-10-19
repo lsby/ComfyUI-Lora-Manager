@@ -276,6 +276,48 @@ async def test_get_paginated_data_filters_and_searches_combination():
     assert response["total_pages"] == 1
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("metadata_status", "expected_names"),
+    [
+        ("valid", ["Explicit Valid", "Legacy Valid"]),
+        ("invalid", ["Explicit Invalid", "Legacy Invalid"]),
+        ("failed", ["Explicit Failed"]),
+    ],
+)
+async def test_get_paginated_data_filters_by_persistent_metadata_status(
+    metadata_status, expected_names
+):
+    items = [
+        {"model_name": "Explicit Valid", "metadata_fetch_status": "valid"},
+        {"model_name": "Explicit Invalid", "metadata_fetch_status": "invalid"},
+        {"model_name": "Explicit Failed", "metadata_fetch_status": "failed"},
+        {"model_name": "Legacy Valid", "civitai": {"id": 123}},
+        {"model_name": "Legacy Invalid", "civitai_deleted": True},
+        {"model_name": "Unknown"},
+    ]
+    repository = StubRepository(items)
+    service = DummyService(
+        model_type="stub",
+        scanner=object(),
+        metadata_class=BaseModelMetadata,
+        cache_repository=repository,
+        filter_set=PassThroughFilterSet(),
+        search_strategy=NoSearchStrategy(),
+        settings_provider=StubSettings({}),
+    )
+
+    response = await service.get_paginated_data(
+        page=1,
+        page_size=20,
+        sort_by="name:asc",
+        metadata_status=metadata_status,
+    )
+
+    assert [item["model_name"] for item in response["items"]] == expected_names
+    assert response["total"] == len(expected_names)
+
+
 class PassThroughFilterSet(ModelFilterSet):
     def __init__(self):
         super().__init__(settings=StubSettings({}))

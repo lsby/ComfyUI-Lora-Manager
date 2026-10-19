@@ -85,6 +85,7 @@ class BaseModelService(ABC):
         hash_filters: dict[str, Any] | None = None,
         favorites_only: bool = False,
         update_available_only: bool = False,
+        metadata_status: str | None = None,
         credit_required: Optional[bool] = None,
         allow_selling_generated_content: Optional[bool] = None,
         tag_logic: str = "any",
@@ -248,6 +249,13 @@ class BaseModelService(ABC):
                 filtered_data = await self._apply_allow_selling_filter(
                     filtered_data, allow_selling_generated_content
                 )
+
+            if metadata_status:
+                filtered_data = [
+                    item
+                    for item in filtered_data
+                    if self._resolve_metadata_fetch_status(item) == metadata_status
+                ]
         filter_duration = time.perf_counter() - t1
         post_filter_count = len(filtered_data)
 
@@ -292,6 +300,18 @@ class BaseModelService(ABC):
             final_count,
         )
         return paginated
+
+    @staticmethod
+    def _resolve_metadata_fetch_status(item: Dict[str, Any]) -> str | None:
+        explicit_status = item.get("metadata_fetch_status")
+        if explicit_status in ("valid", "invalid", "failed"):
+            return explicit_status
+        if item.get("civitai_deleted") is True:
+            return "invalid"
+        civitai = item.get("civitai")
+        if isinstance(civitai, dict) and (civitai.get("id") or civitai.get("modelId")):
+            return "valid"
+        return None
 
     async def get_excluded_paginated_data(
         self,

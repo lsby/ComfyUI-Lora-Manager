@@ -1022,16 +1022,12 @@
         "checkTooltip": "Checking updates may take a while."
       },
       "metadataStatus": {
-        "title": "Filter by the latest metadata fetch result",
-        "action": "Fetch Status",
-        "menuLabel": "Choose a metadata fetch status",
-        "all": "All Results",
-        "success": "Successful",
-        "updated": "Updated",
-        "unchanged": "Unchanged",
+        "title": "Filter by persistent metadata status",
+        "action": "Metadata Status",
+        "menuLabel": "Choose a metadata status",
+        "valid": "Valid",
         "invalid": "Invalid",
-        "failed": "Failed",
-        "skipped": "Skipped"
+        "failed": "Failed"
       }
     },
     "bulkOperations": {
@@ -2855,7 +2851,6 @@
       "fetchMetadataFailed": "Failed to fetch metadata: {message}",
       "selectModelsFirst": "Select one or more models first.",
       "noFailedMetadataFetches": "There are no failed metadata fetches to retry.",
-      "noMetadataFetchReport": "Run a metadata fetch first to create a status report.",
       "clearFilterFailed": "Failed to clear custom filter: {message}"
     },
     "contextMenu": {

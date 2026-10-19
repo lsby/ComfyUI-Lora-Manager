@@ -208,15 +208,6 @@ body.sticky-controls .sticky-topbar {
     color: var(--lora-accent);
 }
 
-.metadata-status-count {
-    min-width: 24px;
-    margin-left: auto;
-    padding-left: 12px;
-    text-align: right;
-    color: var(--text-color-secondary);
-    font-variant-numeric: tabular-nums;
-}
-
 /* Active state for buttons that can be toggled */
 .control-group button.active {
     background: var(--lora-accent);

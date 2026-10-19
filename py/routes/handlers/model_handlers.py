@@ -411,6 +411,10 @@ class ModelListingHandler:
             request.query.get("update_available_only", "false").lower() == "true"
         )
 
+        metadata_status = request.query.get("metadata_status")
+        if metadata_status not in ("valid", "invalid", "failed"):
+            metadata_status = None
+
         # Tag logic: "any" (OR) or "all" (AND) for include tags
         tag_logic = request.query.get("tag_logic", "any").lower()
         if tag_logic not in ("any", "all"):
@@ -472,6 +476,7 @@ class ModelListingHandler:
             "hash_filters": hash_filters,
             "favorites_only": favorites_only,
             "update_available_only": update_available_only,
+            "metadata_status": metadata_status,
             "credit_required": credit_required,
             "allow_selling_generated_content": allow_selling_generated_content,
             "model_types": model_types,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -241,12 +242,16 @@ class BulkMetadataRefreshUseCase:
                             error = "Failed to calculate hash"
                             failures.append({"name": model.get("model_name", file_path or "Unknown"), "error": error})
                             report_items.append(self._report_item(model, "failed", error))
+                            await self._persist_metadata_fetch_status(model, "failed", error)
                             processed += 1
                             handled_count += 1
                             continue
                     else:
                         self._logger.warning(f"Scanner does not support lazy hash calculation for {file_path}")
                         report_items.append(self._report_item(model, "skipped", "Hash calculation is not supported"))
+                        await self._persist_metadata_fetch_status(
+                            model, "failed", "Hash calculation is not supported"
+                        )
                         skipped_count += 1
                         processed += 1
                         handled_count += 1
@@ -256,6 +261,9 @@ class BulkMetadataRefreshUseCase:
                 if not model.get("sha256"):
                     self._logger.warning(f"Skipping model without hash: {file_path}")
                     report_items.append(self._report_item(model, "skipped", "Model has no SHA-256 hash"))
+                    await self._persist_metadata_fetch_status(
+                        model, "failed", "Model has no SHA-256 hash"
+                    )
                     skipped_count += 1
                     processed += 1
                     handled_count += 1
@@ -297,9 +305,11 @@ class BulkMetadataRefreshUseCase:
                     if self._is_invalid_model(model, error):
                         invalid_count += 1
                         report_items.append(self._report_item(model, "invalid", error))
+                        await self._persist_metadata_fetch_status(model, "invalid", error)
                     else:
                         failures.append({"name": current_name, "error": error})
                         report_items.append(self._report_item(model, "failed", error))
+                        await self._persist_metadata_fetch_status(model, "failed", error)
                     self._logger.warning("Failed to fetch metadata for %s: %s", current_name, error_msg)
 
                 if consecutive_rate_limits >= RATE_LIMIT_ABORT_THRESHOLD:
@@ -331,6 +341,7 @@ class BulkMetadataRefreshUseCase:
                     report_items.append(
                         self._report_item(model, "updated" if changed else "unchanged")
                     )
+                    await self._persist_metadata_fetch_status(model, "valid")
                     if original_name != model.get("model_name"):
                         needs_resort = True
                 processed += 1
@@ -350,6 +361,7 @@ class BulkMetadataRefreshUseCase:
                 current_name = model.get("model_name", model.get("file_path", "Unknown"))
                 failures.append({"name": current_name, "error": str(exc)})
                 report_items.append(self._report_item(model, "failed", str(exc)))
+                await self._persist_metadata_fetch_status(model, "failed", str(exc))
                 self._logger.error(
                     "Error fetching CivitAI data for %s: %s",
                     model.get("file_path"),
@@ -489,6 +501,52 @@ class BulkMetadataRefreshUseCase:
             )
         }
         return json.dumps(fields, sort_keys=True, ensure_ascii=False, default=str)
+
+    async def _persist_metadata_fetch_status(
+        self,
+        model: Dict[str, Any],
+        status: str,
+        detail: str = "",
+    ) -> None:
+        """Persist a stable fetch classification to the owned sidecar and cache."""
+        file_path = model.get("file_path", "")
+        if not file_path:
+            return
+
+        model["metadata_fetch_status"] = status
+        model["metadata_fetch_status_detail"] = detail
+        model["metadata_fetch_status_at"] = datetime.now(timezone.utc).isoformat()
+        payload = model.copy()
+        payload.pop("folder", None)
+
+        if os.path.isfile(file_path):
+            saved = await MetadataManager.save_metadata(file_path, payload)
+            if not saved:
+                self._logger.warning(
+                    "Failed to persist metadata fetch status to sidecar for %s",
+                    file_path,
+                )
+
+        try:
+            scanner = self._service.scanner
+            sync_cache = getattr(scanner, "sync_cache_from_metadata", None)
+            if callable(sync_cache):
+                result = sync_cache(file_path, payload)
+                if inspect.isawaitable(result):
+                    await result
+                return
+
+            update_cache = getattr(scanner, "update_single_model_cache", None)
+            if callable(update_cache):
+                result = update_cache(file_path, file_path, payload)
+                if inspect.isawaitable(result):
+                    await result
+        except Exception as exc:  # pragma: no cover - best-effort cache sync
+            self._logger.warning(
+                "Failed to persist metadata fetch status in cache for %s: %s",
+                file_path,
+                exc,
+            )
 
     @staticmethod
     def _is_invalid_model(model: Dict[str, Any], error: str) -> bool:

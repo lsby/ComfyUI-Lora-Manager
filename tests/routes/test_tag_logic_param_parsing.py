@@ -166,3 +166,24 @@ async def test_tag_logic_without_include_tags(handler):
 
     # tag_logic should still be set even without tag filters
     assert service.last_call_kwargs["tag_logic"] == "all"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["valid", "invalid", "failed"])
+async def test_metadata_status_param_accepts_stable_values(handler, status):
+    h, service = handler
+
+    response = await make_request(h, f"metadata_status={status}")
+
+    assert response.status == 200
+    assert service.last_call_kwargs["metadata_status"] == status
+
+
+@pytest.mark.asyncio
+async def test_metadata_status_param_ignores_report_only_or_unknown_values(handler):
+    h, service = handler
+
+    response = await make_request(h, "metadata_status=updated")
+
+    assert response.status == 200
+    assert service.last_call_kwargs["metadata_status"] is None

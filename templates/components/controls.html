@@ -158,13 +158,18 @@
                     <i class="fas fa-caret-down"></i>
                 </button>
                 <div class="dropdown-menu metadata-status-filter-menu">
-                    {% for status, icon in [('all', 'fa-list'), ('success', 'fa-check-circle'), ('updated', 'fa-sync-alt'), ('unchanged', 'fa-minus-circle'), ('invalid', 'fa-exclamation-triangle'), ('failed', 'fa-times-circle'), ('skipped', 'fa-forward')] %}
-                    <div class="dropdown-item" data-metadata-status="{{ status }}">
-                        <i class="fas {{ icon }}"></i>
-                        <span data-metadata-status-label>{{ t('loras.controls.metadataStatus.' ~ status) }}</span>
-                        <span class="metadata-status-count" data-metadata-status-count>0</span>
+                    <div class="dropdown-item" data-metadata-status="valid">
+                        <i class="fas fa-check-circle"></i>
+                        <span data-metadata-status-label>{{ t('loras.controls.metadataStatus.valid') }}</span>
                     </div>
-                    {% endfor %}
+                    <div class="dropdown-item" data-metadata-status="invalid">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span data-metadata-status-label>{{ t('loras.controls.metadataStatus.invalid') }}</span>
+                    </div>
+                    <div class="dropdown-item" data-metadata-status="failed">
+                        <i class="fas fa-times-circle"></i>
+                        <span data-metadata-status-label>{{ t('loras.controls.metadataStatus.failed') }}</span>
+                    </div>
                 </div>
             </div>
             {% endif %}

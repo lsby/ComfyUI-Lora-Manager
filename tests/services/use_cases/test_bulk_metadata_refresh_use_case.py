@@ -32,6 +32,7 @@ def mock_service():
     scanner.reset_cancellation = MagicMock()
     scanner.is_cancelled = MagicMock(return_value=False)
     scanner.update_single_model_cache = AsyncMock(return_value=True)
+    scanner.sync_cache_from_metadata = AsyncMock(return_value=True)
     scanner.calculate_hash_for_model = AsyncMock(return_value="calculated_hash_123")
 
     service = MagicMock()
@@ -212,6 +213,50 @@ async def test_normal_model_with_existing_hash_not_affected(mock_hydrate, use_ca
 
     assert result["success"] is True
     assert result["updated"] == 1
+    assert existing_model["metadata_fetch_status"] == "valid"
+    cached_payload = mock_service.scanner.sync_cache_from_metadata.call_args.args[1]
+    assert cached_payload["metadata_fetch_status"] == "valid"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        ("Model not found", "invalid"),
+        ("Temporary network failure", "failed"),
+    ],
+)
+@patch.object(metadata_manager.MetadataManager, "hydrate_model_data")
+async def test_fetch_persists_stable_failure_classification(
+    mock_hydrate,
+    error,
+    expected_status,
+    use_case,
+    mock_service,
+    mock_metadata_sync,
+):
+    mock_hydrate.return_value = None
+    model = {
+        "file_path": "/models/model.safetensors",
+        "sha256": "existing_hash_abc",
+        "hash_status": "completed",
+        "model_name": "Test Model",
+        "civitai": {},
+        "from_civitai": False,
+        "civitai_deleted": False,
+    }
+    mock_metadata_sync.fetch_and_update_model.return_value = (False, error)
+    mock_service.scanner.get_cached_data.return_value = SimpleNamespace(
+        raw_data=[model], resort=AsyncMock()
+    )
+
+    result = await use_case.execute()
+
+    assert result["success"] is True
+    assert model["metadata_fetch_status"] == expected_status
+    assert model["metadata_fetch_status_detail"] == error
+    cached_payload = mock_service.scanner.sync_cache_from_metadata.call_args.args[1]
+    assert cached_payload["metadata_fetch_status"] == expected_status
 
 
 @pytest.mark.asyncio

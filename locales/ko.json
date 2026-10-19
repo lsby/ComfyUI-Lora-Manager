@@ -1022,16 +1022,12 @@
                 "checkTooltip": "업데이트 확인에는 시간이 걸릴 수 있습니다."
             },
             "metadataStatus": {
-                "title": "[TODO: Translate] Filter by the latest metadata fetch result",
-                "action": "[TODO: Translate] Fetch Status",
-                "menuLabel": "[TODO: Translate] Choose a metadata fetch status",
-                "all": "[TODO: Translate] All Results",
-                "success": "[TODO: Translate] Successful",
-                "updated": "[TODO: Translate] Updated",
-                "unchanged": "[TODO: Translate] Unchanged",
+                "title": "[TODO: Translate] Filter by persistent metadata status",
+                "action": "[TODO: Translate] Metadata Status",
+                "menuLabel": "[TODO: Translate] Choose a metadata status",
+                "valid": "[TODO: Translate] Valid",
                 "invalid": "[TODO: Translate] Invalid",
-                "failed": "[TODO: Translate] Failed",
-                "skipped": "[TODO: Translate] Skipped"
+                "failed": "[TODO: Translate] Failed"
             }
         },
         "bulkOperations": {
@@ -2855,7 +2851,6 @@
             "fetchMetadataFailed": "메타데이터 가져오기 실패: {message}",
             "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "noFailedMetadataFetches": "[TODO: Translate] There are no failed metadata fetches to retry.",
-            "noMetadataFetchReport": "[TODO: Translate] Run a metadata fetch first to create a status report.",
             "clearFilterFailed": "사용자 정의 필터 지우기 실패: {message}"
         },
         "contextMenu": {

@@ -943,9 +943,8 @@ export class PageControls {
     initMetadataFetchStatusFilter() {
         const storageKey = `metadata_fetch_status_filter_${this.pageType}`;
         const storedStatus = getSessionItem(storageKey, null);
-        const report = getStorageItem(`${this.pageType}_last_metadata_fetch_report`, null);
-
-        this.pageState.metadataFetchStatusFilter = report?.items?.length
+        const allowedStatuses = new Set(['valid', 'invalid', 'failed']);
+        this.pageState.metadataFetchStatusFilter = allowedStatuses.has(storedStatus)
             ? storedStatus
             : null;
         if (!this.pageState.metadataFetchStatusFilter) {
@@ -959,17 +958,10 @@ export class PageControls {
         const label = document.getElementById('metadataStatusFilterLabel');
         if (!button || !label) return;
 
-        const apiClient = getModelApiClient();
-        const counts = typeof apiClient.getMetadataFetchStatusCounts === 'function'
-            ? apiClient.getMetadataFetchStatusCounts()
-            : {};
         const activeStatus = this.pageState.metadataFetchStatusFilter || null;
 
         document.querySelectorAll('[data-metadata-status]').forEach((item) => {
             const status = item.dataset.metadataStatus;
-            const count = counts[status] || 0;
-            const countElement = item.querySelector('[data-metadata-status-count]');
-            if (countElement) countElement.textContent = String(count);
             item.classList.toggle('active', status === activeStatus);
         });
 
@@ -977,15 +969,18 @@ export class PageControls {
             ? document.querySelector(`[data-metadata-status="${activeStatus}"]`)
             : null;
         const activeLabel = activeItem?.querySelector('[data-metadata-status-label]')?.textContent?.trim();
-        label.textContent = activeLabel
-            ? `${activeLabel} ${counts[activeStatus] || 0}`
-            : label.dataset.defaultLabel;
+        label.textContent = activeLabel || label.dataset.defaultLabel;
         button.classList.toggle('active', Boolean(activeStatus));
     }
 
     async toggleMetadataFetchStatusFilter() {
-        const nextStatus = this.pageState.metadataFetchStatusFilter ? null : 'all';
-        await this.setMetadataFetchStatusFilter(nextStatus);
+        if (this.pageState.metadataFetchStatusFilter) {
+            await this.setMetadataFetchStatusFilter(null);
+            return;
+        }
+        document.getElementById('metadataStatusFilterBtn')
+            ?.closest('.dropdown-group')
+            ?.classList.toggle('active');
     }
 
     async setMetadataFetchStatusFilter(status) {
@@ -993,11 +988,6 @@ export class PageControls {
 
         const storageKey = `metadata_fetch_status_filter_${this.pageType}`;
         if (status) {
-            const report = getStorageItem(`${this.pageType}_last_metadata_fetch_report`, null);
-            if (!report?.items?.length) {
-                showToast('toast.controls.noMetadataFetchReport', {}, 'info');
-                return;
-            }
             setSessionItem(storageKey, status);
         } else {
             removeSessionItem(storageKey);
