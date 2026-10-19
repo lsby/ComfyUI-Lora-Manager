@@ -991,12 +991,12 @@
             "fetch": {
                 "title": "從 CivitAI 取得 metadata",
                 "action": "取得",
-                "menuTitle": "[TODO: Translate] Choose metadata fetch scope",
-                "selected": "[TODO: Translate] Fetch Selected",
-                "all": "[TODO: Translate] Fetch All",
-                "forceSelected": "[TODO: Translate] Force Fetch Selected",
-                "forceAll": "[TODO: Translate] Force Fetch All",
-                "retryFailed": "[TODO: Translate] Retry Last Failures"
+                "menuTitle": "選擇元資料取得範圍",
+                "selected": "取得所選模型",
+                "all": "取得全部模型",
+                "forceSelected": "強制取得所選模型",
+                "forceAll": "強制取得全部模型",
+                "retryFailed": "重試上次失敗項目"
             },
             "download": {
                 "title": "從網址下載",
@@ -1022,12 +1022,12 @@
                 "checkTooltip": "檢查更新可能耗時。"
             },
             "metadataStatus": {
-                "title": "[TODO: Translate] Filter by persistent metadata status",
-                "action": "[TODO: Translate] Metadata Status",
-                "menuLabel": "[TODO: Translate] Choose a metadata status",
-                "valid": "[TODO: Translate] Valid",
-                "invalid": "[TODO: Translate] Invalid",
-                "failed": "[TODO: Translate] Failed"
+                "title": "依持久化元資料狀態篩選",
+                "action": "元資料狀態",
+                "menuLabel": "選擇元資料狀態",
+                "valid": "有效",
+                "invalid": "無效",
+                "failed": "失敗"
             }
         },
         "bulkOperations": {
@@ -2226,8 +2226,8 @@
         "metadataFetchSummary": {
             "title": "元資料獲取摘要",
             "statSuccess": "成功",
-            "statUpdated": "[TODO: Translate] Updated",
-            "statInvalid": "[TODO: Translate] Invalid",
+            "statUpdated": "已更新",
+            "statInvalid": "無效",
             "statFailed": "失敗",
             "statSkipped": "已跳過",
             "statOffline": "磁碟機離線",
@@ -2238,13 +2238,13 @@
             "close": "關閉",
             "copyReport": "複製報告",
             "downloadCsv": "下載 CSV",
-            "downloadJson": "[TODO: Translate] Download JSON",
-            "reportItems": "[TODO: Translate] Report Items ({count})",
-            "noItemsMessage": "[TODO: Translate] No models needed processing.",
+            "downloadJson": "下載 JSON",
+            "reportItems": "報告項目（{count}）",
+            "noItemsMessage": "沒有模型需要處理。",
             "columnModelName": "模型名稱",
             "columnError": "錯誤",
-            "columnStatus": "[TODO: Translate] Status",
-            "columnDetail": "[TODO: Translate] Detail"
+            "columnStatus": "狀態",
+            "columnDetail": "詳細資訊"
         },
         "downloadBatchSummary": {
             "title": "批次下載摘要",
@@ -2849,8 +2849,8 @@
             "reloadFailed": "重新載入 {pageType} 失敗：{message}",
             "refreshFailed": "{action} {pageType} 失敗：{message}",
             "fetchMetadataFailed": "取得 metadata 失敗：{message}",
-            "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
-            "noFailedMetadataFetches": "[TODO: Translate] There are no failed metadata fetches to retry.",
+            "selectModelsFirst": "請先選擇一個或多個模型。",
+            "noFailedMetadataFetches": "沒有可重試的元資料取得失敗項目。",
             "clearFilterFailed": "清除自訂篩選失敗：{message}"
         },
         "contextMenu": {
