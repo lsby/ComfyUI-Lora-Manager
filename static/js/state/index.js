@@ -16,7 +16,6 @@ const DEFAULT_SETTINGS_BASE = Object.freeze({
     show_only_sfw: false,
     enable_metadata_archive_db: false,
     model_archive_enabled: false,
-    model_archive_path: '',
     model_archive_download_media: true,
     enable_civarchive_api: true,
     enable_openmodeldb_api: true,

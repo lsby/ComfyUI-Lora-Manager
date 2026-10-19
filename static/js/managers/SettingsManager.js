@@ -1454,9 +1454,6 @@ export class SettingsManager {
         this.attachPathField('sidecarStoragePath', {
             onAfterSelect: () => this.handleSidecarStoragePathChange(),
         });
-        this.attachPathField('modelArchivePath', {
-            onAfterSelect: () => this.saveInputSetting('modelArchivePath', 'model_archive_path'),
-        });
     }
 
     loadDownloadBackendSettings() {
@@ -3915,11 +3912,6 @@ export class SettingsManager {
             const modelArchiveDownloadMedia = document.getElementById('modelArchiveDownloadMedia');
             if (modelArchiveDownloadMedia) {
                 modelArchiveDownloadMedia.checked = state.global.settings.model_archive_download_media ?? true;
-            }
-
-            const modelArchivePath = document.getElementById('modelArchivePath');
-            if (modelArchivePath) {
-                modelArchivePath.value = state.global.settings.model_archive_path || '';
             }
 
             const enableCivarchiveApiCheckbox = document.getElementById('enableCivarchiveApi');

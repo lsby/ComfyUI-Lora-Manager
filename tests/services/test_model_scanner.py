@@ -1573,6 +1573,9 @@ async def test_get_all_folders_records_empty_directories_during_scan(tmp_path: P
     (tmp_path / ".hidden").mkdir()
     (tmp_path / "visible" / ".hidden_child").mkdir(parents=True)
     (tmp_path / PENDING_DELETE_DIR_NAME).mkdir()
+    archive_dir = tmp_path / "example.archive"
+    archive_dir.mkdir()
+    (archive_dir / "stray.txt").write_text("not a model", encoding="utf-8")
 
     scanner = DummyScanner(tmp_path)
     await scanner._initialize_cache()
@@ -1597,6 +1600,9 @@ async def test_get_all_folders_records_empty_directories_during_scan(tmp_path: P
     )
     # The pending-delete staging dir is excluded
     assert PENDING_DELETE_DIR_NAME not in all_folders
+    # Per-model archives are storage artifacts, not model folders.
+    assert "example.archive" not in all_folders
+    assert not any("example.archive" in item["file_path"] for item in cache.raw_data)
 
 
 @pytest.mark.asyncio

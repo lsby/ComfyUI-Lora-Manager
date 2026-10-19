@@ -250,6 +250,9 @@ async def test_b_undo_restores_files_and_removes_batch_dir(tmp_path: Path) -> No
     model.write_bytes(b"model-bytes")
     metadata = root / "model.metadata.json"
     metadata.write_bytes(b"meta-bytes")
+    archive = root / "model.archive"
+    archive.mkdir()
+    (archive / "manifest.json").write_bytes(b"archive-bytes")
 
     service = await PendingDeleteService.get_instance()
     batch_id = await service.stage_model_delete(
@@ -269,6 +272,7 @@ async def test_b_undo_restores_files_and_removes_batch_dir(tmp_path: Path) -> No
     assert result["batch_id"] == batch_id
     assert model.read_bytes() == b"model-bytes"
     assert metadata.read_bytes() == b"meta-bytes"
+    assert (archive / "manifest.json").read_bytes() == b"archive-bytes"
     assert not batch_dir.exists()
 
 

@@ -39,6 +39,7 @@ from typing import (
 
 from ..utils.constants import PREVIEW_EXTENSIONS
 from ..utils.sidecar_paths import get_metadata_path, get_sidecar_dir
+from .model_archive_service import get_model_archive_dir
 from ..utils import settings_paths
 
 logger = logging.getLogger(__name__)
@@ -702,6 +703,10 @@ class PendingDeleteService:
         if os.path.exists(main_path):
             artifacts.append(main_path)
 
+        archive_dir = get_model_archive_dir(model_path)
+        if archive_dir.is_dir():
+            artifacts.append(str(archive_dir))
+
         # Sidecars/previews live in the sidecar dir (the model's own dir in
         # alongside mode, the centralized mirror otherwise).
         sidecar_dir = get_sidecar_dir(model_path)
@@ -773,7 +778,7 @@ class PendingDeleteService:
         return staged_pairs
 
     def _restore_file(self, staged_path: str, original_path: str) -> None:
-        """Move a file between staging and library paths, tolerating EXDEV.
+        """Move an artifact between staging and library paths, tolerating EXDEV.
 
         ``os.rename`` is atomic and preferred (model staging and most recipe
         restores are same-volume). Recipe staging copies into the settings-dir
@@ -787,8 +792,12 @@ class PendingDeleteService:
         except OSError as exc:
             if exc.errno != errno.EXDEV:
                 raise
-            shutil.copy2(staged_path, original_path)
-            os.remove(staged_path)
+            if os.path.isdir(staged_path):
+                shutil.copytree(staged_path, original_path)
+                shutil.rmtree(staged_path)
+            else:
+                shutil.copy2(staged_path, original_path)
+                os.remove(staged_path)
 
     def _rollback_model_staging(
         self, batch_dir: str, staged_pairs: Sequence[Dict[str, Any]]

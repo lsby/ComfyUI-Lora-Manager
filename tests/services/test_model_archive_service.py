@@ -14,7 +14,6 @@ class _Settings:
         self.settings_file = str(root / "settings.json")
         self.values = {
             "model_archive_enabled": True,
-            "model_archive_path": str(root / "archives"),
             "model_archive_download_media": True,
         }
         self.values.update(overrides)
@@ -62,7 +61,7 @@ def _metadata(model_path: Path, preview_path: Path) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_archive_is_centralized_append_only_and_downloads_media(tmp_path, monkeypatch):
+async def test_archive_is_beside_model_append_only_and_downloads_media(tmp_path, monkeypatch):
     model_path = tmp_path / "model.safetensors"
     preview_path = tmp_path / "model.preview.webp"
     examples_path = tmp_path / "examples"
@@ -93,6 +92,7 @@ async def test_archive_is_centralized_append_only_and_downloads_media(tmp_path, 
     assert downloader.calls == ["https://image.civitai.com/example.png"]
 
     model_dir = Path(first["archive_dir"])
+    assert model_dir == tmp_path / "model.archive"
     manifest = json.loads((model_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["model_id"] == 123
     assert manifest["model_version_id"] == 456

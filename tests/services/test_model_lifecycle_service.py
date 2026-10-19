@@ -283,6 +283,9 @@ async def test_rename_model_preserves_compound_extensions(tmp_path: Path):
         "preview_url": preview_path.as_posix(),
     }
     metadata_path.write_text(json.dumps(metadata_payload))
+    archive_dir = tmp_path / f"{old_name}.archive"
+    archive_dir.mkdir()
+    (archive_dir / "manifest.json").write_text("{}", encoding="utf-8")
 
     async def metadata_loader(path: str):
         with open(path, "r", encoding="utf-8") as handle:
@@ -304,6 +307,7 @@ async def test_rename_model_preserves_compound_extensions(tmp_path: Path):
     expected_main = tmp_path / f"{new_name}.safetensors"
     expected_metadata = tmp_path / f"{new_name}.metadata.json"
     expected_preview = tmp_path / f"{new_name}.preview.webp"
+    expected_archive = tmp_path / f"{new_name}.archive"
 
     assert expected_main.exists()
     assert not model_path.exists()
@@ -311,6 +315,9 @@ async def test_rename_model_preserves_compound_extensions(tmp_path: Path):
     assert result["new_file_path"].endswith(f"{new_name}.safetensors")
     assert expected_preview.exists()
     assert not preview_path.exists()
+    assert expected_archive.is_dir()
+    assert (expected_archive / "manifest.json").exists()
+    assert not archive_dir.exists()
 
     saved_metadata = json.loads(expected_metadata.read_text())
     assert saved_metadata["file_name"] == new_name
@@ -375,6 +382,9 @@ async def test_rename_model_preserves_extension(tmp_path: Path):
 
     preview_path = tmp_path / f"{old_name}.preview.png"
     preview_path.write_bytes(b"preview")
+    archive_dir = tmp_path / "model.archive"
+    archive_dir.mkdir()
+    (archive_dir / "manifest.json").write_text("{}", encoding="utf-8")
 
     metadata_path = tmp_path / f"{old_name}.metadata.json"
     metadata_payload = {
@@ -404,6 +414,7 @@ async def test_rename_model_preserves_extension(tmp_path: Path):
     expected_main = tmp_path / f"{new_name}{old_extension}"
     expected_metadata = tmp_path / f"{new_name}.metadata.json"
     expected_preview = tmp_path / f"{new_name}.preview.png"
+    expected_archive = tmp_path / f"{new_name}.archive"
 
     assert expected_main.exists()
     assert not model_path.exists()
@@ -411,6 +422,9 @@ async def test_rename_model_preserves_extension(tmp_path: Path):
     assert result["new_file_path"].endswith(f"{new_name}{old_extension}")
     assert expected_preview.exists()
     assert not preview_path.exists()
+    assert expected_archive.is_dir()
+    assert (expected_archive / "manifest.json").exists()
+    assert not archive_dir.exists()
 
     saved_metadata = json.loads(expected_metadata.read_text())
     assert saved_metadata["file_name"] == new_name
@@ -1011,6 +1025,9 @@ async def test_delete_model_stages_file(tmp_path: Path):
     metadata_path.write_text(json.dumps({}))
     preview_path = root / "model.preview.png"
     preview_path.write_bytes(b"preview")
+    archive_dir = root / "model.archive"
+    archive_dir.mkdir()
+    (archive_dir / "manifest.json").write_text("{}", encoding="utf-8")
 
     scanner = ScannerForDelete(
         raw_data=[
@@ -1033,11 +1050,13 @@ async def test_delete_model_stages_file(tmp_path: Path):
     assert not model_path.exists()
     assert not metadata_path.exists()
     assert not preview_path.exists()
+    assert not archive_dir.exists()
     batch_dir = root / PENDING_DELETE_DIR_NAME / batch_id
     assert batch_dir.is_dir()
     assert (batch_dir / "model.safetensors").read_bytes() == b"content"
     assert (batch_dir / "model.metadata.json").exists()
     assert (batch_dir / "model.preview.png").exists()
+    assert (batch_dir / "model.archive" / "manifest.json").exists()
 
     assert scanner.cache.raw_data == []
     assert scanner._hash_index.removed == [str(model_path)]

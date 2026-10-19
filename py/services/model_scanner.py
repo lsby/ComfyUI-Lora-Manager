@@ -69,9 +69,10 @@ def _is_excluded_dir(name: str) -> bool:
     """Return True when a directory entry must be skipped during model walks.
 
     The pending-delete staging directory is excluded so staged files never
-    appear in the library as ghost model entries.
+    appear in the library as ghost model entries. Per-model ``.archive``
+    directories contain preserved metadata and media, not library models.
     """
-    return name == PENDING_DELETE_DIR_NAME
+    return name == PENDING_DELETE_DIR_NAME or name.lower().endswith(".archive")
 
 
 def _is_hidden_relative_path(rel_path: str) -> bool:

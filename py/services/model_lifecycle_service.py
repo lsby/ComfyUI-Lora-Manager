@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, List, Mapping, Optional, TYPE_CHECKING, cast
 
@@ -14,6 +15,7 @@ from ..services.pending_delete_service import get_pending_delete_service
 from ..utils.constants import PREVIEW_EXTENSIONS
 from ..utils.metadata_manager import MetadataManager
 from ..utils.sidecar_paths import get_metadata_path, get_preview_dir, get_sidecar_dir
+from .model_archive_service import get_model_archive_dir
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,14 @@ async def delete_model_artifacts(
                 deleted.append(pattern)
             except Exception as exc:  # pragma: no cover - defensive path
                 logger.warning("Failed to delete %s: %s", pattern, exc)
+
+    archive_dir = get_model_archive_dir(model_path)
+    if archive_dir.is_dir():
+        try:
+            shutil.rmtree(archive_dir)
+            deleted.append(str(archive_dir))
+        except Exception as exc:  # pragma: no cover - defensive path
+            logger.warning("Failed to delete %s: %s", archive_dir, exc)
 
     return deleted
 
@@ -465,6 +475,7 @@ class ModelLifecycleService:
         sidecar_dir = get_sidecar_dir(file_path)
         patterns: List[tuple[str, str]] = [
             (target_dir, f"{old_file_name}{old_extension}"),
+            (target_dir, f"{old_file_name}.archive"),
             (sidecar_dir, metadata_filename),
             (sidecar_dir, f"{metadata_filename}.bak"),
         ]
@@ -586,6 +597,7 @@ class ModelLifecycleService:
             ".metadata.json.bak",
             ".metadata.json",
             ".safetensors",
+            ".archive",
             *PREVIEW_EXTENSIONS,
         ]
 

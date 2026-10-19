@@ -1,4 +1,4 @@
-"""Durable, centralized snapshots of model-site metadata and media."""
+"""Durable snapshots of model-site metadata and media beside model files."""
 
 from __future__ import annotations
 
@@ -58,12 +58,6 @@ class ModelArchiveService:
     def enabled(self) -> bool:
         return bool(self._settings.get("model_archive_enabled", False))
 
-    def get_archive_root(self) -> Path:
-        configured = str(self._settings.get("model_archive_path", "") or "").strip()
-        if configured:
-            return Path(configured).expanduser().absolute()
-        return Path(self._settings.settings_file).absolute().parent / "model-archives"
-
     @staticmethod
     def _source_payload(metadata: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -98,9 +92,7 @@ class ModelArchiveService:
         return f"path-{hashlib.sha256(normalized.encode('utf-8')).hexdigest()}"
 
     def _model_dir(self, metadata: Dict[str, Any], file_path: str) -> Path:
-        key = self._archive_key(metadata, file_path)
-        bucket = key[:2] if not key.startswith(("version-", "path-")) else key.split("-", 1)[0]
-        return self.get_archive_root() / "models" / bucket / key
+        return get_model_archive_dir(file_path)
 
     @staticmethod
     def _source_url(metadata: Dict[str, Any]) -> str:
@@ -131,6 +123,8 @@ class ModelArchiveService:
 
         if not self.enabled or not isinstance(metadata, dict):
             return {"archived": False, "reason": "disabled"}
+        if not file_path:
+            return {"archived": False, "reason": "missing_file_path"}
         source_payload = self._source_payload(metadata)
         if not source_payload.get("civitai") and not source_payload.get("modelDescription"):
             return {"archived": False, "reason": "no_source_metadata"}
@@ -389,6 +383,13 @@ class ModelArchiveService:
 
 
 _MODEL_ARCHIVE_SERVICE: Optional[ModelArchiveService] = None
+
+
+def get_model_archive_dir(file_path: str) -> Path:
+    """Return the archive directory stored beside a model file."""
+
+    model_path = Path(file_path).absolute()
+    return model_path.with_name(f"{model_path.stem}.archive")
 
 
 def get_model_archive_service() -> ModelArchiveService:
