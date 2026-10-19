@@ -149,6 +149,24 @@
                     </div>
                 </div>
             </div>
+            <div class="control-group dropdown-group metadata-status-filter-group">
+                <button id="metadataStatusFilterBtn" data-action="toggle-metadata-status" class="dropdown-main" title="{{ t('loras.controls.metadataStatus.title') }}">
+                    <i class="fas fa-filter"></i>
+                    <span id="metadataStatusFilterLabel" data-default-label="{{ t('loras.controls.metadataStatus.action') }}">{{ t('loras.controls.metadataStatus.action') }}</span>
+                </button>
+                <button class="dropdown-toggle" aria-label="{{ t('loras.controls.metadataStatus.menuLabel') }}">
+                    <i class="fas fa-caret-down"></i>
+                </button>
+                <div class="dropdown-menu metadata-status-filter-menu">
+                    {% for status, icon in [('all', 'fa-list'), ('success', 'fa-check-circle'), ('updated', 'fa-sync-alt'), ('unchanged', 'fa-minus-circle'), ('invalid', 'fa-exclamation-triangle'), ('failed', 'fa-times-circle'), ('skipped', 'fa-forward')] %}
+                    <div class="dropdown-item" data-metadata-status="{{ status }}">
+                        <i class="fas {{ icon }}"></i>
+                        <span data-metadata-status-label>{{ t('loras.controls.metadataStatus.' ~ status) }}</span>
+                        <span class="metadata-status-count" data-metadata-status-count>0</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
             {% endif %}
             <div id="customFilterIndicator" class="control-group hidden">
                 <div class="filter-active">

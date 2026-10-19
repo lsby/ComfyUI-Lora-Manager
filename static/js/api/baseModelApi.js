@@ -29,6 +29,7 @@ export class BaseModelApiClient {
         }
         this.modelType = modelType || getCurrentModelType();
         this.apiConfig = getCompleteApiConfig(this.modelType);
+        this._metadataStatusFilterCache = null;
     }
 
     /**
@@ -41,6 +42,7 @@ export class BaseModelApiClient {
         }
         this.modelType = modelType;
         this.apiConfig = getCompleteApiConfig(modelType);
+        this._metadataStatusFilterCache = null;
     }
 
     /**
@@ -82,6 +84,17 @@ export class BaseModelApiClient {
             const endpoint = isExcludedView
                 ? this.apiConfig.endpoints.excluded
                 : this.apiConfig.endpoints.list;
+
+            if (!isExcludedView && pageState.metadataFetchStatusFilter) {
+                return await this._fetchMetadataStatusPage({
+                    endpoint,
+                    params,
+                    page,
+                    pageSize: actualPageSize,
+                    status: pageState.metadataFetchStatusFilter,
+                });
+            }
+
             const response = await fetch(`${endpoint}?${params}`);
             if (!response.ok) {
                 throw new Error(`Failed to fetch ${this.apiConfig.config.displayName}s: ${response.statusText}`);
@@ -936,11 +949,10 @@ export class BaseModelApiClient {
                 // Wait for the operation to complete via WebSocket
                 const finalData = await operationComplete;
 
-                resetAndReload(false);
-
                 // Show result summary with failure details
                 if (finalData) {
                     this._recordMetadataFetchResult(finalData);
+                    resetAndReload(false);
                     this._showMetadataRefreshResult(finalData);
                 }
             } catch (error) {
@@ -979,6 +991,7 @@ export class BaseModelApiClient {
 
         try {
             setStorageItem(this._getMetadataFetchReportStorageKey(), storedReport);
+            this._metadataStatusFilterCache = null;
         } catch (error) {
             console.warn('Failed to save metadata fetch report:', error);
         }
@@ -997,6 +1010,130 @@ export class BaseModelApiClient {
                 .filter((item) => item.status === 'failed' && item.file_path)
                 .map((item) => item.file_path)
         )];
+    }
+
+    getMetadataFetchStatusCounts(report = this.getLastMetadataFetchReport()) {
+        const counts = {
+            all: 0,
+            success: 0,
+            updated: 0,
+            unchanged: 0,
+            invalid: 0,
+            failed: 0,
+            skipped: 0,
+        };
+        if (!report || !Array.isArray(report.items)) return counts;
+
+        report.items.forEach((item) => {
+            if (!item.file_path) return;
+            counts.all += 1;
+            if (item.status === 'updated' || item.status === 'unchanged') {
+                counts.success += 1;
+            }
+            if (Object.hasOwn(counts, item.status)) {
+                counts[item.status] += 1;
+            }
+        });
+        return counts;
+    }
+
+    _getMetadataFetchStatusPaths(status, report = this.getLastMetadataFetchReport()) {
+        if (!report || !Array.isArray(report.items)) return new Set();
+
+        const acceptedStatuses = status === 'success'
+            ? new Set(['updated', 'unchanged'])
+            : null;
+        return new Set(
+            report.items
+                .filter((item) => {
+                    if (!item.file_path) return false;
+                    if (status === 'all') return true;
+                    return acceptedStatuses
+                        ? acceptedStatuses.has(item.status)
+                        : item.status === status;
+                })
+                .map((item) => this._normalizeMetadataReportPath(item.file_path))
+        );
+    }
+
+    _normalizeMetadataReportPath(filePath) {
+        return String(filePath || '').replaceAll('\\', '/').toLowerCase();
+    }
+
+    async _fetchMetadataStatusPage({ endpoint, params, page, pageSize, status }) {
+        const report = this.getLastMetadataFetchReport();
+        const wantedPaths = this._getMetadataFetchStatusPaths(status, report);
+        if (wantedPaths.size === 0) {
+            return {
+                items: [],
+                totalItems: 0,
+                totalPages: 0,
+                currentPage: page,
+                hasMore: false,
+                folders: [],
+            };
+        }
+
+        const baseParams = new URLSearchParams(params);
+        baseParams.delete('page');
+        baseParams.delete('page_size');
+        const cacheKey = [
+            endpoint,
+            baseParams.toString(),
+            status,
+            report?.recorded_at || report?.generated_at || '',
+        ].join('|');
+
+        if (this._metadataStatusFilterCache?.key !== cacheKey) {
+            this._metadataStatusFilterCache = {
+                key: cacheKey,
+                promise: this._loadMetadataStatusItems(endpoint, baseParams, wantedPaths),
+            };
+        }
+
+        const { items, folders } = await this._metadataStatusFilterCache.promise;
+        const start = Math.max(0, (page - 1) * pageSize);
+        const pageItems = items.slice(start, start + pageSize);
+        const totalPages = Math.ceil(items.length / pageSize);
+        return {
+            items: pageItems,
+            totalItems: items.length,
+            totalPages,
+            currentPage: page,
+            hasMore: page < totalPages,
+            folders,
+        };
+    }
+
+    async _loadMetadataStatusItems(endpoint, baseParams, wantedPaths) {
+        const matchedItems = [];
+        let folders = [];
+        let backendPage = 1;
+        let totalPages = 1;
+
+        do {
+            const requestParams = new URLSearchParams(baseParams);
+            requestParams.set('page', String(backendPage));
+            requestParams.set('page_size', '100');
+            const response = await fetch(`${endpoint}?${requestParams}`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${this.apiConfig.config.displayName}s: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            if (backendPage === 1) {
+                folders = data.folders || [];
+            }
+            (data.items || []).forEach((item) => {
+                if (wantedPaths.has(this._normalizeMetadataReportPath(item.file_path))) {
+                    matchedItems.push(item);
+                }
+            });
+            totalPages = Number(data.total_pages) || 1;
+            backendPage += 1;
+        } while (backendPage <= totalPages);
+
+        return { items: matchedItems, folders };
     }
 
     _showMetadataRefreshResult(data) {

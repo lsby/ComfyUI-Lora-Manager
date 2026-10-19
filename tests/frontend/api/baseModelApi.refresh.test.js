@@ -522,6 +522,10 @@ describe('BaseModelApiClient metadata fetch report storage', () => {
     setStorageItemMock.mockReset();
   });
 
+  afterEach(() => {
+    delete global.fetch;
+  });
+
   it('records the latest per-model result with retryable file paths', async () => {
     const client = await createClient();
 
@@ -575,6 +579,77 @@ describe('BaseModelApiClient metadata fetch report storage', () => {
       'loras_last_metadata_fetch_report',
       null
     );
+  });
+
+  it('counts success as updated plus unchanged while preserving detailed statuses', async () => {
+    const client = await createClient();
+    getStorageItemMock.mockReturnValue({
+      items: [
+        { file_path: 'C:/models/a.safetensors', status: 'updated' },
+        { file_path: 'C:/models/b.safetensors', status: 'unchanged' },
+        { file_path: 'C:/models/c.safetensors', status: 'invalid' },
+        { file_path: 'C:/models/d.safetensors', status: 'failed' },
+        { file_path: 'C:/models/e.safetensors', status: 'skipped' },
+      ],
+    });
+
+    expect(client.getMetadataFetchStatusCounts()).toEqual({
+      all: 5,
+      success: 2,
+      updated: 1,
+      unchanged: 1,
+      invalid: 1,
+      failed: 1,
+      skipped: 1,
+    });
+  });
+
+  it('filters the complete backend result before applying frontend pagination', async () => {
+    const client = await createClient();
+    getStorageItemMock.mockReturnValue({
+      recorded_at: '2026-10-19T12:00:00Z',
+      items: [
+        { file_path: 'C:\\models\\b.safetensors', status: 'failed' },
+        { file_path: 'C:/models/c.safetensors', status: 'failed' },
+      ],
+    });
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [
+            { file_path: 'C:/models/a.safetensors' },
+            { file_path: 'C:/models/b.safetensors' },
+          ],
+          folders: ['models'],
+          total_pages: 2,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{ file_path: 'C:/models/c.safetensors' }],
+          total_pages: 2,
+        }),
+      });
+
+    const result = await client._fetchMetadataStatusPage({
+      endpoint: '/api/lm/loras',
+      params: new URLSearchParams('sort_by=name%3Aasc'),
+      page: 1,
+      pageSize: 1,
+      status: 'failed',
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      items: [{ file_path: 'C:/models/b.safetensors' }],
+      totalItems: 2,
+      totalPages: 2,
+      currentPage: 1,
+      hasMore: true,
+      folders: ['models'],
+    });
   });
 });
 

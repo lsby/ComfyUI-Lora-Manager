@@ -191,6 +191,32 @@ body.sticky-controls .sticky-topbar {
     color: inherit;
 }
 
+.metadata-status-filter-group .dropdown-main.active + .dropdown-toggle {
+    background: var(--lora-accent);
+    border-color: var(--lora-accent);
+    color: var(--text-on-accent);
+}
+
+.metadata-status-filter-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    min-width: 170px;
+}
+
+.metadata-status-filter-menu .dropdown-item.active {
+    background: oklch(var(--lora-accent) / 0.16);
+    color: var(--lora-accent);
+}
+
+.metadata-status-count {
+    min-width: 24px;
+    margin-left: auto;
+    padding-left: 12px;
+    text-align: right;
+    color: var(--text-color-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
 /* Active state for buttons that can be toggled */
 .control-group button.active {
     background: var(--lora-accent);

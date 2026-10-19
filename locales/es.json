@@ -1020,6 +1020,18 @@
                 "menuLabel": "Mostrar opciones de actualización",
                 "check": "Buscar actualizaciones",
                 "checkTooltip": "Comprobar actualizaciones puede tardar."
+            },
+            "metadataStatus": {
+                "title": "[TODO: Translate] Filter by the latest metadata fetch result",
+                "action": "[TODO: Translate] Fetch Status",
+                "menuLabel": "[TODO: Translate] Choose a metadata fetch status",
+                "all": "[TODO: Translate] All Results",
+                "success": "[TODO: Translate] Successful",
+                "updated": "[TODO: Translate] Updated",
+                "unchanged": "[TODO: Translate] Unchanged",
+                "invalid": "[TODO: Translate] Invalid",
+                "failed": "[TODO: Translate] Failed",
+                "skipped": "[TODO: Translate] Skipped"
             }
         },
         "bulkOperations": {
@@ -2843,6 +2855,7 @@
             "fetchMetadataFailed": "Error al obtener metadatos: {message}",
             "selectModelsFirst": "[TODO: Translate] Select one or more models first.",
             "noFailedMetadataFetches": "[TODO: Translate] There are no failed metadata fetches to retry.",
+            "noMetadataFetchReport": "[TODO: Translate] Run a metadata fetch first to create a status report.",
             "clearFilterFailed": "Error al limpiar filtro personalizado: {message}"
         },
         "contextMenu": {

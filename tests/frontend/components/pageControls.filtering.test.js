@@ -4,6 +4,7 @@ const loadMoreWithVirtualScrollMock = vi.fn();
 const refreshModelsMock = vi.fn();
 const fetchCivitaiMetadataMock = vi.fn();
 const getRetryableMetadataFailuresMock = vi.fn();
+const getMetadataFetchStatusCountsMock = vi.fn();
 const resetAndReloadMock = vi.fn();
 const getModelApiClientMock = vi.fn();
 const apiClientMock = {
@@ -11,6 +12,7 @@ const apiClientMock = {
   refreshModels: refreshModelsMock,
   fetchCivitaiMetadata: fetchCivitaiMetadataMock,
   getRetryableMetadataFailures: getRetryableMetadataFailuresMock,
+  getMetadataFetchStatusCounts: getMetadataFetchStatusCountsMock,
 };
 
 const showToastMock = vi.fn();
@@ -79,6 +81,15 @@ beforeEach(() => {
   refreshModelsMock.mockResolvedValue(undefined);
   fetchCivitaiMetadataMock.mockResolvedValue(undefined);
   getRetryableMetadataFailuresMock.mockReturnValue([]);
+  getMetadataFetchStatusCountsMock.mockReturnValue({
+    all: 0,
+    success: 0,
+    updated: 0,
+    unchanged: 0,
+    invalid: 0,
+    failed: 0,
+    skipped: 0,
+  });
   resetAndReloadMock.mockResolvedValue(undefined);
   getModelApiClientMock.mockReturnValue(apiClientMock);
   performModelUpdateCheckMock.mockResolvedValue({ status: 'success', displayName: 'LoRA', records: [] });
@@ -183,6 +194,20 @@ function renderControlsDom(pageKey) {
                 <i class="fas fa-sync-alt"></i>
                 <span>Check updates</span>
               </div>
+            </div>
+          </div>
+          <div class="control-group dropdown-group metadata-status-filter-group">
+            <button id="metadataStatusFilterBtn" class="dropdown-main">
+              <span id="metadataStatusFilterLabel" data-default-label="Fetch Status">Fetch Status</span>
+            </button>
+            <button class="dropdown-toggle"></button>
+            <div class="dropdown-menu">
+              ${['all', 'success', 'updated', 'unchanged', 'invalid', 'failed', 'skipped'].map((status) => `
+                <div class="dropdown-item" data-metadata-status="${status}">
+                  <span data-metadata-status-label>${status}</span>
+                  <span data-metadata-status-count>0</span>
+                </div>
+              `).join('')}
             </div>
           </div>
         </div>
@@ -1316,6 +1341,63 @@ describe('PageControls action keyboard shortcuts', () => {
     expect(fetchCivitaiMetadataMock).not.toHaveBeenCalled();
     expect(showToastMock).toHaveBeenCalledWith(
       'toast.controls.noFailedMetadataFetches', {}, 'info'
+    );
+  });
+
+  it('filters models by a status from the latest metadata fetch report', async () => {
+    localStorage.setItem('lora_manager_loras_last_metadata_fetch_report', JSON.stringify({
+      items: [
+        { file_path: 'C:/models/failed.safetensors', status: 'failed' },
+      ],
+    }));
+    getMetadataFetchStatusCountsMock.mockReturnValue({
+      all: 4,
+      success: 3,
+      updated: 2,
+      unchanged: 1,
+      invalid: 0,
+      failed: 1,
+      skipped: 0,
+    });
+    await setupLorasControls();
+
+    document.querySelector('[data-metadata-status="failed"]').click();
+    await Promise.resolve();
+
+    const stateModule = await import('../../../static/js/state/index.js');
+    expect(stateModule.getCurrentPageState().metadataFetchStatusFilter).toBe('failed');
+    expect(sessionStorage.getItem('lora_manager_metadata_fetch_status_filter_loras')).toBe('failed');
+    expect(document.getElementById('metadataStatusFilterBtn').classList.contains('active')).toBe(true);
+    expect(document.getElementById('metadataStatusFilterLabel').textContent).toBe('failed 1');
+    expect(resetAndReloadMock).toHaveBeenCalledWith(false);
+  });
+
+  it('clears an active metadata status filter from the main button', async () => {
+    localStorage.setItem('lora_manager_loras_last_metadata_fetch_report', JSON.stringify({
+      items: [{ file_path: 'C:/models/failed.safetensors', status: 'failed' }],
+    }));
+    sessionStorage.setItem('lora_manager_metadata_fetch_status_filter_loras', 'failed');
+    getMetadataFetchStatusCountsMock.mockReturnValue({ failed: 1 });
+    await setupLorasControls();
+
+    document.getElementById('metadataStatusFilterBtn').click();
+    await Promise.resolve();
+
+    const stateModule = await import('../../../static/js/state/index.js');
+    expect(stateModule.getCurrentPageState().metadataFetchStatusFilter).toBeNull();
+    expect(sessionStorage.getItem('lora_manager_metadata_fetch_status_filter_loras')).toBeNull();
+    expect(resetAndReloadMock).toHaveBeenCalledWith(false);
+  });
+
+  it('asks for a metadata fetch before enabling the status filter', async () => {
+    await setupLorasControls();
+
+    document.getElementById('metadataStatusFilterBtn').click();
+    await Promise.resolve();
+
+    expect(resetAndReloadMock).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith(
+      'toast.controls.noMetadataFetchReport', {}, 'info'
     );
   });
 

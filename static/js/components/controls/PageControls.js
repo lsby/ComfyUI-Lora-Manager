@@ -44,6 +44,9 @@ export class PageControls {
         // Initialize favorites filter button state
         this.initFavoritesFilter();
 
+        // Initialize the latest metadata fetch result filter
+        this.initMetadataFetchStatusFilter();
+
         this.initExcludedViewControls();
         this.syncExcludedViewState();
         
@@ -479,6 +482,19 @@ export class PageControls {
         if (updateFilterBtn) {
             updateFilterBtn.addEventListener('click', () => this.toggleUpdateAvailableOnly());
         }
+
+        const metadataStatusFilterBtn = document.getElementById('metadataStatusFilterBtn');
+        if (metadataStatusFilterBtn) {
+            metadataStatusFilterBtn.addEventListener('click', () => this.toggleMetadataFetchStatusFilter());
+        }
+
+        document.querySelectorAll('[data-metadata-status]').forEach((item) => {
+            item.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                document.querySelector('.dropdown-group.active')?.classList.remove('active');
+                await this.setMetadataFetchStatusFilter(item.dataset.metadataStatus || null);
+            });
+        });
     }
     
     /**
@@ -648,6 +664,7 @@ export class PageControls {
         
         try {
             await this.api.fetchFromCivitai({ scope, force, filePaths });
+            this.syncMetadataFetchStatusFilter();
         } catch (error) {
             console.error('Error fetching metadata:', error);
             showToast('toast.controls.fetchMetadataFailed', { message: error.message }, 'error');
@@ -923,6 +940,74 @@ export class PageControls {
         this.updateActionButtonStates();
     }
 
+    initMetadataFetchStatusFilter() {
+        const storageKey = `metadata_fetch_status_filter_${this.pageType}`;
+        const storedStatus = getSessionItem(storageKey, null);
+        const report = getStorageItem(`${this.pageType}_last_metadata_fetch_report`, null);
+
+        this.pageState.metadataFetchStatusFilter = report?.items?.length
+            ? storedStatus
+            : null;
+        if (!this.pageState.metadataFetchStatusFilter) {
+            removeSessionItem(storageKey);
+        }
+        this.syncMetadataFetchStatusFilter();
+    }
+
+    syncMetadataFetchStatusFilter() {
+        const button = document.getElementById('metadataStatusFilterBtn');
+        const label = document.getElementById('metadataStatusFilterLabel');
+        if (!button || !label) return;
+
+        const apiClient = getModelApiClient();
+        const counts = typeof apiClient.getMetadataFetchStatusCounts === 'function'
+            ? apiClient.getMetadataFetchStatusCounts()
+            : {};
+        const activeStatus = this.pageState.metadataFetchStatusFilter || null;
+
+        document.querySelectorAll('[data-metadata-status]').forEach((item) => {
+            const status = item.dataset.metadataStatus;
+            const count = counts[status] || 0;
+            const countElement = item.querySelector('[data-metadata-status-count]');
+            if (countElement) countElement.textContent = String(count);
+            item.classList.toggle('active', status === activeStatus);
+        });
+
+        const activeItem = activeStatus
+            ? document.querySelector(`[data-metadata-status="${activeStatus}"]`)
+            : null;
+        const activeLabel = activeItem?.querySelector('[data-metadata-status-label]')?.textContent?.trim();
+        label.textContent = activeLabel
+            ? `${activeLabel} ${counts[activeStatus] || 0}`
+            : label.dataset.defaultLabel;
+        button.classList.toggle('active', Boolean(activeStatus));
+    }
+
+    async toggleMetadataFetchStatusFilter() {
+        const nextStatus = this.pageState.metadataFetchStatusFilter ? null : 'all';
+        await this.setMetadataFetchStatusFilter(nextStatus);
+    }
+
+    async setMetadataFetchStatusFilter(status) {
+        if (this.pageState.viewMode === 'excluded') return;
+
+        const storageKey = `metadata_fetch_status_filter_${this.pageType}`;
+        if (status) {
+            const report = getStorageItem(`${this.pageType}_last_metadata_fetch_report`, null);
+            if (!report?.items?.length) {
+                showToast('toast.controls.noMetadataFetchReport', {}, 'info');
+                return;
+            }
+            setSessionItem(storageKey, status);
+        } else {
+            removeSessionItem(storageKey);
+        }
+
+        this.pageState.metadataFetchStatusFilter = status || null;
+        this.syncMetadataFetchStatusFilter();
+        await this.resetAndReload(false);
+    }
+
     /**
      * Toggle favorites-only filter and reload models
      */
@@ -1030,6 +1115,7 @@ export class PageControls {
             '[data-action="find-duplicates"]',
             '#favoriteFilterBtn',
             '.update-filter-group',
+            '.metadata-status-filter-group',
             '#modelTypeDropdown',
         ];
         const customFilterIndicator = document.getElementById('customFilterIndicator');
