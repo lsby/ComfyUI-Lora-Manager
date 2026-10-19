@@ -361,6 +361,51 @@ async def test_build_cache_entry_encodes_license_flags(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_build_cache_entry_repairs_stale_preview_path(tmp_path: Path):
+    scanner = DummyScanner(tmp_path)
+    model_path = tmp_path / "sample.txt"
+    model_path.write_text("model", encoding="utf-8")
+    preview_path = tmp_path / "sample.preview.png"
+    preview_path.write_bytes(b"preview")
+
+    metadata = {
+        "file_path": "D:/old-library/sample.txt",
+        "file_name": "sample",
+        "model_name": "Sample",
+        "preview_url": "D:/old-library/sample.preview.png",
+    }
+
+    entry = scanner._build_cache_entry(
+        metadata,
+        file_path_override=_normalize_path(model_path),
+    )
+
+    assert entry["preview_url"] == _normalize_path(preview_path)
+
+
+@pytest.mark.asyncio
+async def test_build_cache_entry_keeps_existing_preview_path(tmp_path: Path):
+    scanner = DummyScanner(tmp_path)
+    model_path = tmp_path / "sample.txt"
+    model_path.write_text("model", encoding="utf-8")
+    stored_preview = tmp_path / "custom-preview.png"
+    stored_preview.write_bytes(b"custom")
+    colocated_preview = tmp_path / "sample.preview.png"
+    colocated_preview.write_bytes(b"colocated")
+
+    metadata = {
+        "file_path": _normalize_path(model_path),
+        "file_name": "sample",
+        "model_name": "Sample",
+        "preview_url": _normalize_path(stored_preview),
+    }
+
+    entry = scanner._build_cache_entry(metadata)
+
+    assert entry["preview_url"] == _normalize_path(stored_preview)
+
+
+@pytest.mark.asyncio
 async def test_initialize_in_background_uses_persisted_cache_without_full_scan(tmp_path: Path, monkeypatch):
     monkeypatch.setenv('LORA_MANAGER_DISABLE_PERSISTENT_CACHE', '0')
     db_path = tmp_path / 'cache.sqlite'
@@ -2776,6 +2821,29 @@ async def test_describe_model_roots_reports_unavailable_configured_root(
     assert unavailable["reachable"] is False
     assert unavailable["available"] is False
     assert unavailable["models"] == 1
+
+
+@pytest.mark.asyncio
+async def test_describe_model_roots_deduplicates_equivalent_path_spellings(
+    tmp_path: Path, monkeypatch
+):
+    root = tmp_path / "loras"
+    root.mkdir()
+    scanner = DummyScanner(root)
+
+    live_path = str(root)
+    configured_variant = live_path + os.sep
+    monkeypatch.setattr(scanner, "get_model_roots", lambda: [live_path])
+    monkeypatch.setattr(
+        scanner,
+        "get_configured_model_roots",
+        lambda: [configured_variant],
+    )
+
+    described = scanner.describe_model_roots()
+
+    assert [entry["path"] for entry in described] == [_normalize_path(root)]
+    assert described[0]["available"] is True
 
 
 @pytest.mark.asyncio
