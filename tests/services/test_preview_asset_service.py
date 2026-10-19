@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -130,6 +131,95 @@ async def test_ensure_preview_falls_back_to_webp_when_rewrite_fails(tmp_path):
     preview_path = Path(local_metadata["preview_url"])
     assert preview_path.exists()
     assert preview_path.suffix == ".webp"
+
+
+@pytest.mark.asyncio
+async def test_ensure_preview_cancels_in_flight_rewritten_download(tmp_path):
+    metadata_path = tmp_path / "model.metadata.json"
+    metadata_path.write_text("{}")
+    local_metadata: dict[str, Any] = {}
+    cancel_requested = False
+
+    class Downloader:
+        async def download_file(self, _url, _path, **kwargs):
+            assert kwargs["max_retries"] == 0
+            assert kwargs["connect_timeout_seconds"] == 10
+            assert kwargs["use_connectivity_guard"] is True
+            await asyncio.Event().wait()
+
+        async def download_to_memory(self, *_args, **_kwargs):
+            pytest.fail("cancelled rewritten download must not fall back")
+
+    async def downloader_factory():
+        return Downloader()
+
+    service = PreviewAssetService(
+        metadata_manager=StubMetadataManager(),
+        downloader_factory=downloader_factory,
+        exif_utils=RecordingExifUtils(),
+    )
+    images: List[Dict[str, object]] = [
+        {
+            "url": "https://image.civitai.com/container/example/original=true/sample.png",
+            "type": "image",
+            "nsfwLevel": 1,
+        }
+    ]
+    task = asyncio.create_task(
+        service.ensure_preview_for_metadata(
+            str(metadata_path),
+            local_metadata,
+            images,
+            cancel_check=lambda: cancel_requested,
+            max_retries=0,
+            connect_timeout_seconds=10,
+        )
+    )
+    await asyncio.sleep(0.05)
+    cancel_requested = True
+    await asyncio.wait_for(task, timeout=1)
+
+    assert "preview_url" not in local_metadata
+
+
+@pytest.mark.asyncio
+async def test_ensure_preview_does_not_retry_original_after_network_failure(tmp_path):
+    metadata_path = tmp_path / "model.metadata.json"
+    metadata_path.write_text("{}")
+    local_metadata: dict[str, Any] = {}
+    memory_calls = 0
+
+    class Downloader:
+        async def download_file(self, _url, _path, **_kwargs):
+            return False, "Network error after 1 attempts: timed out"
+
+        async def download_to_memory(self, *_args, **_kwargs):
+            nonlocal memory_calls
+            memory_calls += 1
+            return False, b"", {}
+
+    async def downloader_factory():
+        return Downloader()
+
+    service = PreviewAssetService(
+        metadata_manager=StubMetadataManager(),
+        downloader_factory=downloader_factory,
+        exif_utils=RecordingExifUtils(),
+    )
+    await service.ensure_preview_for_metadata(
+        str(metadata_path),
+        local_metadata,
+        [
+            {
+                "url": "https://image.civitai.com/container/example/original=true/sample.png",
+                "type": "image",
+            }
+        ],
+        max_retries=0,
+    )
+
+    assert memory_calls == 0
+    assert "preview_url" not in local_metadata
 
 
 @pytest.mark.asyncio

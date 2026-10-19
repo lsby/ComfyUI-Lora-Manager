@@ -436,6 +436,8 @@ class Downloader:
         pause_event: Optional[DownloadStreamControl] = None,
         raise_on_rate_limit: bool = False,
         max_retries: Optional[int] = None,
+        connect_timeout_seconds: Optional[float] = None,
+        use_connectivity_guard: bool = False,
     ) -> Tuple[bool, str]:
         """
         Download a file with resumable downloads and retry mechanism
@@ -455,6 +457,10 @@ class Downloader:
                 contract. Defaults to the legacy tuple behavior.
             max_retries: Optional per-call retry override. ``None`` preserves
                 the configured downloader default.
+            connect_timeout_seconds: Optional shorter connection timeout for
+                small, non-critical assets such as previews.
+            use_connectivity_guard: Stop repeated requests to a destination
+                after consecutive transport failures.
 
         Returns:
             Tuple[bool, str]: (success, save_path or error message)
@@ -463,6 +469,17 @@ class Downloader:
         effective_max_retries = (
             self.max_retries if max_retries is None else max(0, int(max_retries))
         )
+        guard = await ConnectivityGuard.get_instance() if use_connectivity_guard else None
+        destination = self._guard_destination(url)
+        if guard is not None and guard.should_block_request(destination):
+            return False, OFFLINE_COOLDOWN_ERROR
+        request_options: Dict[str, Any] = {}
+        if connect_timeout_seconds is not None:
+            request_options["timeout"] = aiohttp.ClientTimeout(
+                total=None,
+                connect=max(1.0, float(connect_timeout_seconds)),
+                sock_read=60,
+            )
         part_path = save_path + ".part" if allow_resume else save_path
 
         # Prepare headers
@@ -511,6 +528,7 @@ class Downloader:
                     headers=request_headers,
                     allow_redirects=True,
                     proxy=self.proxy_url,
+                    **request_options,
                 ) as response:
                     # Handle different response codes
                     if response.status == 200:
@@ -872,6 +890,8 @@ class Downloader:
                             progress_callback, final_snapshot
                         )
 
+                    if guard is not None:
+                        guard.register_success(destination)
                     return True, save_path
 
             except (
@@ -883,6 +903,11 @@ class Downloader:
                 DownloadRestartRequested,
             ) as e:
                 retry_count += 1
+
+                if guard is not None and guard.is_network_unreachable_error(e):
+                    guard.register_network_failure(e, destination)
+                    if guard.should_block_request(destination):
+                        return False, OFFLINE_COOLDOWN_ERROR
 
                 if is_ssl_cert_verify_error(e):
                     logger.error(

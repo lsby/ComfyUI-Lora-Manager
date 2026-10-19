@@ -76,13 +76,14 @@ class FakeSession:
         self._get_calls = 0
         self.requests = []
 
-    def get(self, url, headers=None, allow_redirects=True, proxy=None):  # noqa: D401 - signature mirrors aiohttp
+    def get(self, url, headers=None, allow_redirects=True, proxy=None, **kwargs):  # noqa: D401 - signature mirrors aiohttp
         self.requests.append(
             {
                 "url": url,
                 "headers": headers or {},
                 "allow_redirects": allow_redirects,
                 "proxy": proxy,
+                **kwargs,
             }
         )
         response_factory = self._responses[self._get_calls]

@@ -805,14 +805,29 @@ export class BaseModelApiClient {
                         switch (data.status) {
                             case 'started':
                                 loading.setProgress(0);
-                                loading.setStatus(`Metadata: preparing ${data.total || 0} models...`);
+                                loading.setStatus(`Metadata: ${data.fetch_total || 0} models need fetching | ⏭️ ${data.skipped_count || 0} already complete/skipped`);
                                 break;
 
-                            case 'processing': {
-                                const handled = data.handled || data.processed;
-                                const percent = data.total > 0 ? ((handled / data.total) * 100).toFixed(1) : 100;
+                            case 'model_started': {
+                                const fetchIndex = data.fetch_index || 0;
+                                const fetchTotal = data.fetch_total || 0;
+                                const percent = fetchTotal > 0 ? (((fetchIndex - 1) / fetchTotal) * 100).toFixed(1) : 100;
                                 loading.setProgress(percent);
-                                let statusText = `Metadata (${handled}/${data.total}) ${data.current_name || ''} | ✅ ${data.success || 0}`;
+                                let statusText = `Metadata (${fetchIndex}/${fetchTotal}) fetching ${data.current_name || ''}`;
+                                statusText += ` | ✅ ${data.success || 0}`;
+                                if (data.failure_count > 0) {
+                                    statusText += ` | ❌ ${data.failure_count} failed`;
+                                }
+                                loading.setStatus(statusText);
+                                break;
+                            }
+
+                            case 'processing': {
+                                const handled = data.fetch_index || data.processed;
+                                const fetchTotal = data.fetch_total || data.total;
+                                const percent = fetchTotal > 0 ? ((handled / fetchTotal) * 100).toFixed(1) : 100;
+                                loading.setProgress(percent);
+                                let statusText = `Metadata (${handled}/${fetchTotal}) completed ${data.current_name || ''} | ✅ ${data.success || 0}`;
                                 if (data.failure_count > 0) {
                                     statusText += ` | ❌ ${data.failure_count} failed`;
                                 }

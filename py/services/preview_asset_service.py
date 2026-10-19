@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from typing import Awaitable, Callable, Dict, Optional, Sequence
+from contextlib import suppress
+from typing import Any, Awaitable, Callable, Dict, Optional, Sequence
 from urllib.parse import urlparse
 
 from ..utils.constants import CARD_PREVIEW_WIDTH, PREVIEW_EXTENSIONS
@@ -14,6 +16,8 @@ from ..utils.sidecar_paths import get_metadata_path, get_preview_dir
 from .settings_manager import get_settings_manager
 
 logger = logging.getLogger(__name__)
+
+CancelCheck = Callable[[], bool]
 
 
 class PreviewAssetService:
@@ -35,6 +39,10 @@ class PreviewAssetService:
         metadata_path: str,
         local_metadata: Dict[str, object],
         images: Sequence[Dict[str, object]] | None,
+        *,
+        cancel_check: Optional[CancelCheck] = None,
+        max_retries: Optional[int] = None,
+        connect_timeout_seconds: Optional[float] = None,
     ) -> None:
         """Ensure preview assets exist for the supplied metadata entry."""
 
@@ -84,6 +92,13 @@ class PreviewAssetService:
             return ext or fallback
 
         downloader = await self._downloader_factory()
+        retry_options = (
+            {"max_retries": max_retries} if max_retries is not None else {}
+        )
+        if connect_timeout_seconds is not None:
+            retry_options["connect_timeout_seconds"] = connect_timeout_seconds
+        if cancel_check is not None or max_retries == 0:
+            retry_options["use_connectivity_guard"] = True
 
         if is_video:
             extension = extension_from_url(preview_url, ".mp4")
@@ -101,29 +116,57 @@ class PreviewAssetService:
                     continue
                 seen.add(candidate)
 
-                success, _ = await downloader.download_file(candidate, preview_path, use_auth=False)
+                result = await self._await_cancellable(
+                    downloader.download_file(
+                        candidate,
+                        preview_path,
+                        use_auth=False,
+                        **retry_options,
+                    ),
+                    cancel_check,
+                )
+                if result is None:
+                    return
+                success, error = result
                 if success:
                     local_metadata["preview_url"] = preview_path.replace(os.sep, "/")
                     local_metadata["preview_nsfw_level"] = nsfw_level
+                    return
+                if self._is_network_failure(error):
                     return
         else:
             rewritten_url, rewritten = rewrite_preview_url(preview_url, media_type="image")
             if rewritten:
                 extension = extension_from_url(preview_url, ".png")
                 preview_path = os.path.join(preview_dir, base_name + extension)
-                success, _ = await downloader.download_file(
-                    rewritten_url, preview_path, use_auth=False
+                result = await self._await_cancellable(
+                    downloader.download_file(
+                        rewritten_url,
+                        preview_path,
+                        use_auth=False,
+                        **retry_options,
+                    ),
+                    cancel_check,
                 )
+                if result is None:
+                    return
+                success, error = result
                 if success:
                     local_metadata["preview_url"] = preview_path.replace(os.sep, "/")
                     local_metadata["preview_nsfw_level"] = nsfw_level
                     return
+                if self._is_network_failure(error):
+                    return
 
             extension = ".webp"
             preview_path = os.path.join(preview_dir, base_name + extension)
-            success, content, _headers = await downloader.download_to_memory(
-                preview_url, use_auth=False
+            memory_result = await self._await_cancellable(
+                downloader.download_to_memory(preview_url, use_auth=False),
+                cancel_check,
             )
+            if memory_result is None:
+                return
+            success, content, _headers = memory_result
             if not success:
                 return
 
@@ -148,6 +191,39 @@ class PreviewAssetService:
 
             local_metadata["preview_url"] = preview_path.replace(os.sep, "/")
             local_metadata["preview_nsfw_level"] = nsfw_level
+
+    @staticmethod
+    async def _await_cancellable(
+        operation: Awaitable[Any],
+        cancel_check: Optional[CancelCheck],
+    ) -> Optional[Any]:
+        """Await a preview transfer while polling the parent task's cancel flag."""
+
+        task = asyncio.ensure_future(operation)
+        while not task.done():
+            await asyncio.wait({task}, timeout=0.25)
+            if cancel_check is not None and cancel_check():
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+                return None
+        return await task
+
+    @staticmethod
+    def _is_network_failure(error: object) -> bool:
+        text = str(error).lower()
+        return any(
+            marker in text
+            for marker in (
+                "network error",
+                "cannot connect",
+                "connection refused",
+                "timed out",
+                "timeout",
+                "offline_cooldown",
+                "network offline",
+            )
+        )
 
     async def replace_preview(
         self,

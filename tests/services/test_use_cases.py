@@ -234,8 +234,12 @@ async def test_bulk_metadata_refresh_emits_progress_and_updates_cache(
     assert result["success"] is True
     assert progress.events[0]["status"] == "started"
     assert progress.events[-1]["status"] == "completed"
+    assert any(event["status"] == "model_started" for event in progress.events)
     assert metadata_sync.calls
     assert metadata_sync.calls[0]["archive_remote_media"] is False
+    assert metadata_sync.calls[0]["preview_max_retries"] == 0
+    assert metadata_sync.calls[0]["preview_connect_timeout_seconds"] == 10
+    assert metadata_sync.calls[0]["cancel_check"]() is False
     assert metadata_sync.calls[0]["model_data"]["extra"] == "value"
     assert scanner._cache.raw_data[0]["extra"] == "value"
     assert hydration_calls == ["model1.safetensors"]

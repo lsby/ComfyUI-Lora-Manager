@@ -130,7 +130,11 @@ class BulkMetadataRefreshUseCase:
             payload.update(extra)
             await progress_callback.on_progress(payload)
 
-        await emit("started", phase="metadata")
+        await emit(
+            "started",
+            phase="metadata",
+            fetch_total=total_to_process,
+        )
 
         RATE_LIMIT_ABORT_THRESHOLD = 3
         consecutive_rate_limits = 0
@@ -142,6 +146,16 @@ class BulkMetadataRefreshUseCase:
                 return {"success": False, "message": "Operation cancelled", "processed": processed, "updated": success, "total": total_models, "failures": failures, "failure_count": len(failures), "skipped_count": skipped_count, "offline_skipped": offline_skipped, "elapsed_seconds": int(time.monotonic() - start_time)}
             try:
                 original_name = model.get("model_name")
+                await emit(
+                    "model_started",
+                    phase="metadata",
+                    fetch_index=processed + 1,
+                    fetch_total=total_to_process,
+                    current_name=model.get("model_name")
+                    or model.get("file_name")
+                    or model.get("file_path")
+                    or "Unknown",
+                )
 
                 # Handle lazy hash calculation for models with pending hash status
                 sha256 = model.get("sha256", "")
@@ -196,6 +210,9 @@ class BulkMetadataRefreshUseCase:
                     model_data=model,
                     update_cache_func=self._service.scanner.update_single_model_cache,
                     archive_remote_media=False,
+                    cancel_check=self._service.scanner.is_cancelled,
+                    preview_max_retries=0,
+                    preview_connect_timeout_seconds=10,
                 )
 
                 if not result and error_msg and "Rate limited" in error_msg:
@@ -247,6 +264,8 @@ class BulkMetadataRefreshUseCase:
                     phase="metadata",
                     processed=processed,
                     success=success,
+                    fetch_index=processed,
+                    fetch_total=total_to_process,
                     current_name=model.get("model_name", "Unknown"),
                 )
             except Exception as exc:  # pragma: no cover - logging path

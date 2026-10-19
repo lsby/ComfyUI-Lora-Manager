@@ -367,6 +367,8 @@ class ModelArchiveService:
                     str(target),
                     use_auth=False,
                     max_retries=0,
+                    connect_timeout_seconds=10,
+                    use_connectivity_guard=True,
                 )
             )
             while not download_task.done():
@@ -403,6 +405,8 @@ class ModelArchiveService:
                         "connection refused",
                         "timed out",
                         "timeout",
+                        "offline_cooldown",
+                        "network offline",
                     )
                 )
                 if target.exists():

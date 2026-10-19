@@ -149,6 +149,10 @@ class MetadataSyncService:
         local_metadata: Dict[str, Any],
         civitai_metadata: Dict[str, Any],
         metadata_provider: Optional[MetadataProviderProtocol] = None,
+        *,
+        cancel_check: Optional[Callable[[], bool]] = None,
+        preview_max_retries: Optional[int] = None,
+        preview_connect_timeout_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Merge remote metadata into the local record and persist the result."""
 
@@ -229,8 +233,18 @@ class MetadataSyncService:
         if civitai_autov3:
             local_metadata["autov3"] = civitai_autov3
 
+        preview_options: Dict[str, Any] = {}
+        if cancel_check is not None:
+            preview_options["cancel_check"] = cancel_check
+        if preview_max_retries is not None:
+            preview_options["max_retries"] = preview_max_retries
+        if preview_connect_timeout_seconds is not None:
+            preview_options["connect_timeout_seconds"] = preview_connect_timeout_seconds
         await self._preview_service.ensure_preview_for_metadata(
-            metadata_path, local_metadata, civitai_metadata.get("images", [])
+            metadata_path,
+            local_metadata,
+            civitai_metadata.get("images", []),
+            **preview_options,
         )
 
         saved = await self._metadata_manager.save_metadata(metadata_path, local_metadata)
@@ -286,6 +300,9 @@ class MetadataSyncService:
         model_data: Dict[str, Any],
         update_cache_func: Callable[[str, str, Dict[str, Any]], Awaitable[bool]],
         archive_remote_media: bool = True,
+        cancel_check: Optional[Callable[[], bool]] = None,
+        preview_max_retries: Optional[int] = None,
+        preview_connect_timeout_seconds: Optional[float] = None,
     ) -> tuple[bool, Optional[str]]:
         """Fetch metadata for a model and update both disk and cache state.
 
@@ -535,6 +552,9 @@ class MetadataSyncService:
                 local_metadata,
                 civitai_metadata,
                 metadata_provider,
+                cancel_check=cancel_check,
+                preview_max_retries=preview_max_retries,
+                preview_connect_timeout_seconds=preview_connect_timeout_seconds,
             )
 
             await get_model_archive_service().archive_model(
