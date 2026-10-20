@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import types
 from types import SimpleNamespace
@@ -66,6 +67,56 @@ def test_metadata_hook_installs_and_traces_execution(monkeypatch, metadata_regis
     registry = MetadataRegistry()
     assert registry.current_prompt_id == "prompt-2"
     assert registry.get_metadata("prompt-2")["current_prompt"] is prompt
+
+
+def test_metadata_hook_forwards_async_execution_arguments(monkeypatch, metadata_registry):
+    """New ComfyUI execution arguments must pass through the metadata hook."""
+    fake_execution = types.SimpleNamespace()
+    received = {}
+
+    async def original_map_node_over_list(
+        prompt_id,
+        unique_id,
+        obj,
+        input_data_all,
+        func,
+        allow_interrupt=False,
+        execution_block_cb=None,
+        pre_execute_cb=None,
+        hidden_inputs=None,
+    ):
+        received["hidden_inputs"] = hidden_inputs
+        return {"outputs": "async-result"}
+
+    async def original_execute(*args, **kwargs):
+        return "executed"
+
+    fake_execution._async_map_node_over_list = original_map_node_over_list
+    fake_execution.execute = original_execute
+    monkeypatch.setitem(sys.modules, "execution", fake_execution)
+
+    MetadataHook.install()
+
+    class FakeNode:
+        FUNCTION = "run"
+
+    node = FakeNode()
+    hidden_inputs = {"node_id": "node-async"}
+    result = asyncio.run(
+        fake_execution._async_map_node_over_list(
+            "prompt-async",
+            "node-async",
+            node,
+            {"input": ["value"]},
+            node.FUNCTION,
+            hidden_inputs=hidden_inputs,
+        )
+    )
+
+    assert result == {"outputs": "async-result"}
+    assert received["hidden_inputs"] is hidden_inputs
+
+    metadata_registry.clear_metadata()
 
 
 def test_metadata_processor_extracts_generation_params(populated_registry, monkeypatch):

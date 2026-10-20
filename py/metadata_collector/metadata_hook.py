@@ -154,11 +154,14 @@ class MetadataHook:
         # Store the original _async_map_node_over_list function
         original_map_node_over_list = getattr(execution, map_node_func_name)
 
-        # Wrapped async function - signature must exactly match _async_map_node_over_list
+        # Keep the stable arguments named for metadata collection, while forwarding
+        # every additional argument unchanged. ComfyUI has renamed/added trailing
+        # parameters over time (for example v3_data -> hidden_inputs), so spelling
+        # those parameters out here makes the hook break whenever core evolves.
         async def async_map_node_over_list_with_metadata(
             prompt_id, unique_id, obj, input_data_all, func,
             allow_interrupt=False, execution_block_cb=None,
-            pre_execute_cb=None, v3_data=None
+            pre_execute_cb=None, *extra_args, **extra_kwargs
         ):
             # Only collect metadata when calling the main function of nodes
             if func == obj.FUNCTION and hasattr(obj, '__class__'):
@@ -173,10 +176,12 @@ class MetadataHook:
                 except Exception as e:
                     logger.error(f"Error collecting metadata (pre-execution): {str(e)}")
 
-            # Call original function with exact parameters
+            # Preserve the exact call made by ComfyUI, including version-specific
+            # positional and keyword arguments.
             results = await original_map_node_over_list(
                 prompt_id, unique_id, obj, input_data_all, func,
-                allow_interrupt, execution_block_cb, pre_execute_cb, v3_data=v3_data
+                allow_interrupt, execution_block_cb, pre_execute_cb,
+                *extra_args, **extra_kwargs
             )
 
             if func == obj.FUNCTION and hasattr(obj, '__class__'):
