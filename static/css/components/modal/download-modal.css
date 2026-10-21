@@ -1025,6 +1025,10 @@
 .batch-preview-group {
     display: flex;
     flex-direction: column;
+    /* The list itself is a column flex container. Without opting out of
+       shrinking, a large batch makes every group collapse to a one-pixel
+       border instead of letting the list scroll. */
+    flex: 0 0 auto;
     background: var(--surface-base);
 }
 
@@ -1120,6 +1124,7 @@
 
 .batch-civitai-version {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
