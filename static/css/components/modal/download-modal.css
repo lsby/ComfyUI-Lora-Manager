@@ -1101,6 +1101,60 @@
     max-height: 9999px; /* rest state: content visible; JS inline style overrides during transitions */
 }
 
+/* CivitAI batch entries stay fully expanded: one bordered model group with
+   every version directly selectable, without a secondary editor page. */
+.batch-civitai-group {
+    margin: 8px;
+    border: 1px solid var(--color-accent-border);
+    border-radius: var(--border-radius-sm);
+    overflow: hidden;
+}
+
+.batch-civitai-group-header {
+    cursor: default;
+}
+
+.batch-civitai-version-list {
+    gap: 1px;
+}
+
+.batch-civitai-version {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.batch-civitai-version:hover {
+    background: oklch(var(--lora-accent) / 0.06);
+}
+
+.batch-civitai-version > input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+    accent-color: var(--lora-accent);
+}
+
+.batch-civitai-version.downloaded {
+    opacity: 0.58;
+    cursor: not-allowed;
+}
+
+.batch-civitai-version.partial {
+    border-left: 3px solid var(--lora-accent);
+}
+
+[data-theme="dark"] .batch-civitai-version {
+    background: var(--lora-surface);
+}
+
 /* Dark theme overrides for group styles */
 [data-theme="dark"] .batch-preview-group {
     background: var(--surface-base);

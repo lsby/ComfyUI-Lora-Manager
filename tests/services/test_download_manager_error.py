@@ -1,6 +1,7 @@
 """Error handling and execution tests for DownloadManager."""
 
 import asyncio
+import hashlib
 import os
 import zipfile
 from datetime import datetime
@@ -21,6 +22,112 @@ from py.services.rate_limit_coordinator import RateLimitCoordinator
 from py.services.service_registry import ServiceRegistry
 from py.services.settings_manager import SettingsManager, get_settings_manager
 from py.utils.metadata_manager import MetadataManager
+
+
+@pytest.mark.asyncio
+async def test_execute_download_retries_cleanly_after_sha256_mismatch(
+    monkeypatch, tmp_path
+):
+    manager = DownloadManager()
+    save_dir = tmp_path / "downloads"
+    save_dir.mkdir()
+    target_path = save_dir / "model.safetensors"
+    good_payload = b"verified model payload"
+
+    class DummyMetadata:
+        file_path = str(target_path)
+        file_name = target_path.stem
+        preview_url = None
+        sha256 = hashlib.sha256(good_payload).hexdigest()
+
+        @staticmethod
+        def generate_unique_filename(*_args, **_kwargs):
+            return target_path.name
+
+    attempts = 0
+
+    async def fake_download_model_file(_self, _url, save_path, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        Path(save_path).write_bytes(b"corrupt" if attempts == 1 else good_payload)
+        return True, save_path
+
+    monkeypatch.setattr(
+        DownloadManager, "_download_model_file", fake_download_model_file
+    )
+    monkeypatch.setattr(
+        DownloadManager,
+        "_build_metadata_entries",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        DownloadManager,
+        "_get_lora_scanner",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+
+    result = await manager._execute_download(
+        download_urls=["https://example.invalid/model.safetensors"],
+        save_dir=str(save_dir),
+        metadata=DummyMetadata(),
+        version_info={"images": []},
+        relative_path="",
+        model_type="lora",
+        transfer_backend="python",
+    )
+
+    assert result == {"success": True}
+    assert attempts == 2
+    assert target_path.read_bytes() == good_payload
+
+
+@pytest.mark.asyncio
+async def test_execute_download_reuses_existing_file_when_sha256_matches(
+    monkeypatch, tmp_path
+):
+    manager = DownloadManager()
+    save_dir = tmp_path / "downloads"
+    save_dir.mkdir()
+    target_path = save_dir / "model.safetensors"
+    payload = b"already complete"
+    target_path.write_bytes(payload)
+
+    class DummyMetadata:
+        file_path = str(target_path)
+        file_name = target_path.stem
+        preview_url = None
+        sha256 = hashlib.sha256(payload).hexdigest()
+
+        @staticmethod
+        def generate_unique_filename(*_args, **_kwargs):
+            raise AssertionError("verified existing file must not be renamed")
+
+    transfer = AsyncMock()
+    monkeypatch.setattr(DownloadManager, "_download_model_file", transfer)
+    monkeypatch.setattr(
+        DownloadManager,
+        "_build_metadata_entries",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        DownloadManager,
+        "_get_lora_scanner",
+        AsyncMock(return_value=SimpleNamespace()),
+    )
+
+    result = await manager._execute_download(
+        download_urls=["https://example.invalid/model.safetensors"],
+        save_dir=str(save_dir),
+        metadata=DummyMetadata(),
+        version_info={"images": []},
+        relative_path="",
+        model_type="lora",
+        transfer_backend="python",
+    )
+
+    assert result == {"success": True}
+    transfer.assert_not_awaited()
+    assert target_path.read_bytes() == payload
 
 
 @pytest.fixture(autouse=True)

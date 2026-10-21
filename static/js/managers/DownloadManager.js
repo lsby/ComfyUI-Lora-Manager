@@ -344,8 +344,15 @@ export class DownloadManager {
                     if (item.modelVersionId) {
                         selectedVersion = versions.find(v => v.id.toString() === item.modelVersionId) || versions[0];
                     } else {
-                        selectedVersion = versions[0];
+                        // Default to the newest version that still has
+                        // something downloadable. A downloaded first row must
+                        // not make the whole model group look completed.
+                        selectedVersion = versions.find(v => !this._isVersionFullyDownloaded(v)) || null;
                     }
+                }
+
+                if (this._isVersionFullyDownloaded(selectedVersion)) {
+                    selectedVersion = null;
                 }
 
                 this.batchModels[index] = {
@@ -881,6 +888,40 @@ export class DownloadManager {
             (version?.downloadedFiles || []).map(f => String(f.fileId))
         );
         return this._getWeightFiles(version).filter(f => !downloadedIds.has(String(f.id)));
+    }
+
+    _isVersionFullyDownloaded(version) {
+        if (!version) return false;
+        const weightFiles = this._getWeightFiles(version);
+        if (weightFiles.length <= 1) return Boolean(version.existsLocally);
+
+        // A multi-file version is complete only when every individual file is
+        // present. The old version-level existsLocally flag becomes true after
+        // the first file and therefore cannot represent the whole group.
+        const downloadedIds = new Set(
+            (version.downloadedFiles || []).map(file => String(file.fileId))
+        );
+        return weightFiles.every(file => downloadedIds.has(String(file.id)));
+    }
+
+    _isVersionPartiallyDownloaded(version) {
+        if (!version) return false;
+        const weightFiles = this._getWeightFiles(version);
+        if (weightFiles.length <= 1) return false;
+        const remaining = this._getRemainingFiles(version);
+        return remaining.length > 0 && remaining.length < weightFiles.length;
+    }
+
+    _buildFileParams(file) {
+        if (!file) return null;
+        return {
+            id: file.id,
+            name: file.name || null,
+            type: file.type || 'Model',
+            format: file.metadata?.format || null,
+            size: file.metadata?.size || null,
+            fp: file.metadata?.fp || null,
+        };
     }
 
     // Files of type UNet / Diffusion Model are routed to the diffusion_model
@@ -2187,54 +2228,71 @@ export class DownloadManager {
             `;
         }).filter(Boolean).join('');
 
-        // CivitAI items render flat, outside any group (unchanged)
+        // CivitAI models render as groups with every version visible. This
+        // avoids the old second-level "Change" page and keeps downloaded
+        // state attached to the actual version instead of the first row.
         const civitaiItemsHtml = this.batchModels.map((item, index) => {
             if (item.error) return null;
             if (isExternalModelSource(item.source)) return null;
             const selectedVersions = this._getBatchSelectedVersions(item);
-            const ver = selectedVersions[0] || null;
-            const selectedCount = selectedVersions.length;
-            const firstImage = ver?.images?.find(img => !img.url.endsWith('.mp4'));
-            const thumbnailUrl = firstImage ? firstImage.url : '/loras_static/images/no-preview.png';
-            const fileSize = ver?.modelSizeKB
-                ? (ver.modelSizeKB / 1024).toFixed(1)
-                : (ver?.files?.[0]?.sizeKB ? (ver.files[0].sizeKB / 1024).toFixed(1) : '?');
-            const existsLocally = ver?.existsLocally;
-            // Multi-file versions that are only partially downloaded get a
-            // distinct hint instead of the plain in-library badge (#1058).
-            const isPartiallyDownloaded = existsLocally
-                && this._getWeightFiles(ver).length > 1
-                && this._getRemainingFiles(ver).length > 0;
-            const localBadgeLabel = isPartiallyDownloaded
-                ? translate('modals.download.partiallyDownloaded', {}, 'Partially downloaded')
-                : translate('modals.download.inLibrary');
-            return `
-                <div class="batch-preview-item ${existsLocally ? 'batch-preview-local' : ''}" data-index="${index}">
-                    <div class="batch-preview-thumbnail">
-                        <img src="${thumbnailUrl}" alt="">
-                    </div>
-                    <div class="batch-preview-info">
-                        <div class="batch-preview-name">${ver?.name || `Model #${item.modelId}`}</div>
-                        <div class="batch-preview-meta">
-                            ${ver?.baseModel ? `<span>${ver.baseModel}</span>` : ''}
-                            <span>${fileSize} MB</span>
-                            ${selectedCount > 1 ? `
-                                <span class="batch-preview-version-count">
-                                    ${translate(
-                                        'modals.download.versionsSelected',
-                                        { count: selectedCount },
-                                        `${selectedCount} version(s) selected`
-                                    )}
-                                </span>
-                            ` : ''}
-                            ${existsLocally ? `<span class="batch-preview-local-badge"><i class="fas fa-check"></i> ${localBadgeLabel}</span>` : ''}
+            const selectedIds = new Set(selectedVersions.map(version => String(version.id)));
+            const versions = item.versions || [];
+            let groupName = versions[0]?.model?.name || versions[0]?.modelName || '';
+            if (!groupName && item.url) {
+                try {
+                    const parts = new URL(item.url).pathname.split('/').filter(Boolean);
+                    groupName = decodeURIComponent(parts[parts.length - 1] || '');
+                } catch (_) {
+                    groupName = '';
+                }
+            }
+            groupName = groupName || `Model #${item.modelId}`;
+
+            const versionRows = versions.map(version => {
+                const firstImage = version.images?.find(img => !img.url.endsWith('.mp4'));
+                const thumbnailUrl = firstImage ? firstImage.url : '/loras_static/images/no-preview.png';
+                const primaryFile = this._getWeightFiles(version).find(file => file.primary)
+                    || this._getWeightFiles(version)[0];
+                const fileSize = version.modelSizeKB
+                    ? (version.modelSizeKB / 1024).toFixed(1)
+                    : (primaryFile?.sizeKB ? (primaryFile.sizeKB / 1024).toFixed(1) : '?');
+                const fullyDownloaded = this._isVersionFullyDownloaded(version);
+                const partiallyDownloaded = this._isVersionPartiallyDownloaded(version);
+                const isSelected = selectedIds.has(String(version.id)) && !fullyDownloaded;
+                const localBadgeLabel = partiallyDownloaded
+                    ? translate('modals.download.partiallyDownloaded', {}, 'Partially downloaded')
+                    : translate('modals.download.inLibrary');
+
+                return `
+                    <label class="batch-civitai-version ${fullyDownloaded ? 'downloaded' : ''} ${partiallyDownloaded ? 'partial' : ''}">
+                        <input type="checkbox" class="batch-civitai-version-checkbox"
+                               data-index="${index}" data-version-id="${version.id}"
+                               ${isSelected ? 'checked' : ''} ${fullyDownloaded ? 'disabled' : ''} />
+                        <div class="batch-preview-thumbnail">
+                            <img src="${thumbnailUrl}" alt="">
                         </div>
+                        <div class="batch-preview-info">
+                            <div class="batch-preview-name">${version.name || `#${version.id}`}</div>
+                            <div class="batch-preview-meta">
+                                ${version.baseModel ? `<span>${version.baseModel}</span>` : ''}
+                                <span>${fileSize} MB</span>
+                                ${this._getWeightFiles(version).length > 1 ? `<span>${this._getWeightFiles(version).length} ${translate('modals.download.fileSelection.files', {}, 'files')}</span>` : ''}
+                                ${(fullyDownloaded || partiallyDownloaded) ? `<span class="batch-preview-local-badge"><i class="fas fa-check"></i> ${localBadgeLabel}</span>` : ''}
+                            </div>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+
+            return `
+                <div class="batch-preview-group batch-civitai-group" data-index="${index}">
+                    <div class="batch-preview-group-header batch-civitai-group-header">
+                        <span class="batch-preview-group-name">${groupName}</span>
+                        <span class="batch-preview-group-count"><i class="fas fa-layer-group"></i> ${versions.length}</span>
                     </div>
-                    ${item.versions.length > 1 ? `
-                        <button class="batch-preview-change-version secondary-btn" data-index="${index}">
-                            ${translate('common.actions.change', {}, 'Change')}
-                        </button>
-                    ` : ''}
+                    <div class="batch-preview-group-body expanded batch-civitai-version-list">
+                        ${versionRows}
+                    </div>
                 </div>
             `;
         }).filter(Boolean).join('');
@@ -2355,7 +2413,7 @@ export class DownloadManager {
             }
 
             const header = e.target.closest('.batch-preview-group-header');
-            if (header) {
+            if (header && header.closest('.batch-preview-group')?.dataset.repo) {
                 const group = header.closest('.batch-preview-group');
                 const repo = group.dataset.repo;
                 const body = group.querySelector('.batch-preview-group-body');
@@ -2404,12 +2462,26 @@ export class DownloadManager {
                 this.showBatchPreviewStep();
                 return;
             }
-            const changeBtn = e.target.closest('.batch-preview-change-version');
-            if (changeBtn) {
-                const idx = parseInt(changeBtn.dataset.index);
-                this.openBatchVersionEditor(idx);
-            }
         };
+
+        list.querySelectorAll('.batch-civitai-version-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', event => {
+                const index = Number.parseInt(event.target.dataset.index, 10);
+                const item = this.batchModels[index];
+                if (!item) return;
+                const version = (item.versions || []).find(
+                    candidate => String(candidate.id) === String(event.target.dataset.versionId)
+                );
+                if (!version || this._isVersionFullyDownloaded(version)) return;
+
+                const selected = this._getBatchSelectedVersions(item)
+                    .filter(candidate => String(candidate.id) !== String(version.id));
+                if (event.target.checked) selected.push(version);
+                item.selectedVersions = selected;
+                item.selectedVersion = selected[0] || null;
+                updateCountAndSelectAll();
+            });
+        });
 
         // Individual HF checkbox handler
         const checkboxes = list.querySelectorAll('.batch-preview-checkbox');
@@ -2572,16 +2644,25 @@ export class DownloadManager {
             if (isExternalModelSource(item.source)) {
                 return item.checked !== false ? [item] : [];
             }
-            // CivitAI entries expand one model row into one download job per
-            // selected version. Keep selectedVersion on each job for the
-            // existing progress, retry and reconciliation code paths.
-            return this._getBatchSelectedVersions(item)
-                .filter(version => !version.existsLocally)
-                .map(version => ({
+            // Expand every selected version into concrete file jobs. This is
+            // essential for partially downloaded multi-file versions: a
+            // version-level job would be rejected as soon as its first file
+            // appears in the library.
+            return this._getBatchSelectedVersions(item).flatMap(version => {
+                if (this._isVersionFullyDownloaded(version)) return [];
+                const weightFiles = this._getWeightFiles(version);
+                const remainingFiles = weightFiles.length > 1
+                    ? this._getRemainingFiles(version)
+                    : [];
+                const files = remainingFiles.length > 0 ? remainingFiles : [null];
+                return files.map(file => ({
                     ...item,
                     selectedVersion: version,
                     selectedVersions: [version],
+                    selectedFile: file,
+                    fileParams: this._buildFileParams(file),
                 }));
+            });
         });
         if (downloadItems.length === 0) {
             showToast('toast.loras.downloadCompleted', {}, 'info');
@@ -2699,8 +2780,8 @@ export class DownloadManager {
                         wsHf.close();
                     }
                 } else {
-                    console.log('[download] batch download: fileParams NOT passed for modelId=%s, versionId=%s — backend will use primary file',
-                        item.modelId, item.selectedVersion?.id);
+                    console.log('[download] batch download: modelId=%s, versionId=%s, fileId=%s',
+                        item.modelId, item.selectedVersion?.id, item.fileParams?.id || 'primary');
                     response = await this.apiClient.downloadModel(
                         item.modelId,
                         item.selectedVersion.id,
@@ -2708,7 +2789,8 @@ export class DownloadManager {
                         targetFolder,
                         useDefaultPaths,
                         batchDownloadId,
-                        item.source
+                        item.source,
+                        item.fileParams || null
                     );
                 }
 

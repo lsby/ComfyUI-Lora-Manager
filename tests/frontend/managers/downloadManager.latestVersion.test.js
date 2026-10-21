@@ -263,7 +263,7 @@ describe('DownloadManager latest-version default', () => {
       expect(manager.batchModels[1].selectedVersion.id).toBe(500);
     });
 
-    it('allows selecting multiple versions and shows the count in the batch preview', async () => {
+    it('shows every version inline and allows selecting multiple without a second page', async () => {
       document.getElementById('modelUrl').value =
         'https://civitai.red/models/111/foo\nhttps://civitai.red/models/222/bar';
       const versionsA = [makeVersion(40, 'a2'), makeVersion(10, 'a1')];
@@ -273,18 +273,35 @@ describe('DownloadManager latest-version default', () => {
       );
       await manager.validateAndFetchVersions();
 
-      manager.openBatchVersionEditor(0);
-      document.querySelector('.version-item[data-version-id="10"]').click();
+      const group = document.querySelector('.batch-civitai-group[data-index="0"]');
+      expect(group).toBeTruthy();
+      expect(group.querySelectorAll('.batch-civitai-version')).toHaveLength(2);
 
-      expect(manager.editingSelectedVersions.map(version => version.id)).toEqual([40, 10]);
-      expect(document.getElementById('nextFromVersion').textContent).toBe('Confirm (2)');
-
-      await manager.proceedToLocation();
+      group.querySelector('.batch-civitai-version-checkbox[data-version-id="10"]').click();
 
       expect(manager.batchModels[0].selectedVersions.map(version => version.id)).toEqual([40, 10]);
-      expect(document.querySelector('.batch-preview-item[data-index="0"] .batch-preview-version-count').textContent)
-        .toContain('2 version(s) selected');
+      expect(document.getElementById('versionStep').style.display).not.toBe('block');
       expect(document.getElementById('downloadModalTitle').textContent).toContain('(3)');
+    });
+
+    it('tracks downloaded state per version instead of marking the whole model group', async () => {
+      document.getElementById('modelUrl').value =
+        'https://civitai.red/models/111/foo\nhttps://civitai.red/models/222/bar';
+      const downloaded = { ...makeVersion(40, 'a2'), existsLocally: true };
+      const available = makeVersion(10, 'a1');
+      mockApiClient.fetchCivitaiVersions.mockImplementation(async modelId =>
+        modelId === '111' ? [downloaded, available] : [makeVersion(500, 'b1')]
+      );
+
+      await manager.validateAndFetchVersions();
+
+      const group = document.querySelector('.batch-civitai-group[data-index="0"]');
+      const downloadedRow = group.querySelector('.batch-civitai-version-checkbox[data-version-id="40"]');
+      const availableRow = group.querySelector('.batch-civitai-version-checkbox[data-version-id="10"]');
+      expect(downloadedRow.disabled).toBe(true);
+      expect(availableRow.disabled).toBe(false);
+      expect(availableRow.checked).toBe(true);
+      expect(manager.batchModels[0].selectedVersion.id).toBe(10);
     });
 
     it('expands every selected CivitAI version into a batch download job', async () => {
@@ -305,6 +322,36 @@ describe('DownloadManager latest-version default', () => {
 
       const jobs = executeBatchDownload.mock.calls[0][0];
       expect(jobs.map(job => job.selectedVersion.id)).toEqual([40, 10]);
+    });
+
+    it('expands a partially downloaded multi-file version into remaining file jobs', async () => {
+      const version = {
+        ...makeVersion(40, 'a2'),
+        existsLocally: true,
+        files: [
+          { id: 1, type: 'Model', name: 'one.safetensors' },
+          { id: 2, type: 'Model', name: 'two.safetensors' },
+          { id: 3, type: 'Model', name: 'three.safetensors' },
+        ],
+        downloadedFiles: [{ fileId: 1, fileName: 'one.safetensors' }],
+      };
+      manager.isBatchMode = true;
+      manager.useDefaultPath = true;
+      manager.batchModels = [{
+        modelId: '111',
+        source: 'civitai',
+        versions: [version],
+        selectedVersion: version,
+        selectedVersions: [version],
+      }];
+      const modelRoot = document.getElementById('modelRoot');
+      Object.defineProperty(modelRoot, 'value', { configurable: true, value: '/models/loras' });
+      const executeBatchDownload = vi.spyOn(manager, 'executeBatchDownload').mockResolvedValue(true);
+
+      await manager.startDownload();
+
+      const jobs = executeBatchDownload.mock.calls[0][0];
+      expect(jobs.map(job => job.fileParams.id)).toEqual([2, 3]);
     });
   });
 });

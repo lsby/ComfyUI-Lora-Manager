@@ -1559,6 +1559,30 @@ class DownloadManager:
         base_name, extension = os.path.splitext(original_filename)
         original_path = os.path.join(save_dir, original_filename)
 
+        # A previous process may have completed the payload but stopped before
+        # metadata/indexing. Reuse it only when the publisher supplied a real
+        # SHA256 and the bytes match exactly; otherwise keep the normal unique
+        # filename conflict behavior and never overwrite an unrelated file.
+        expected_sha256 = self._normalize_expected_sha256(
+            getattr(metadata, "sha256", None)
+        )
+        if (
+            expected_sha256
+            and os.path.exists(original_path)
+            and not os.path.exists(f"{original_path}.part")
+            and not os.path.exists(f"{original_path}.aria2")
+        ):
+            hash_error = await self._verify_downloaded_file_hash(
+                original_path, expected_sha256
+            )
+            if hash_error is None:
+                logger.info(
+                    "Reusing pre-existing file with matching SHA256: %s",
+                    original_path,
+                )
+                setattr(metadata, "_download_preverified", True)
+                return True, original_path
+
         if transfer_backend == "aria2":
             control_path = f"{original_path}.aria2"
             if os.path.exists(original_path) and os.path.exists(control_path):
@@ -2664,6 +2688,44 @@ class DownloadManager:
             os.path.join(save_dir, os.path.basename(metadata.file_path))
         )
 
+    @staticmethod
+    def _normalize_expected_sha256(value: Optional[str]) -> str:
+        expected = str(value or "").strip().lower()
+        if len(expected) != 64:
+            return ""
+        if any(char not in "0123456789abcdef" for char in expected):
+            return ""
+        return expected
+
+    async def _verify_downloaded_file_hash(
+        self, file_path: str, expected_sha256: Optional[str]
+    ) -> Optional[str]:
+        """Return an integrity error when a published SHA256 does not match."""
+        expected = self._normalize_expected_sha256(expected_sha256)
+        if not expected:
+            return None
+
+        actual = (await calculate_sha256(file_path) or "").strip().lower()
+        if actual == expected:
+            return None
+
+        return (
+            "SHA256 mismatch after download. "
+            f"Expected: {expected}, Got: {actual or 'unavailable'}"
+        )
+
+    async def _discard_corrupt_download(self, save_path: str) -> None:
+        """Remove a corrupt payload and every resume marker before retrying."""
+        for path in (save_path, f"{save_path}.part", f"{save_path}.aria2"):
+            if not os.path.exists(path):
+                continue
+            try:
+                os.remove(path)
+            except OSError as exc:
+                logger.warning(
+                    "Failed to remove corrupt download state %s: %s", path, exc
+                )
+
     async def _execute_download(
         self,
         download_urls: List[str],
@@ -2894,53 +2956,87 @@ class DownloadManager:
                 if download_id and download_id in self._active_downloads:
                     self._active_downloads[download_id]["status"] = "downloading"
             last_error = None
+            download_verified = bool(getattr(metadata, "_download_preverified", False))
+            if download_verified:
+                logger.info("Skipping transfer for verified existing file: %s", save_path)
             for download_url in download_urls:
+                if download_verified:
+                    break
                 download_url = normalize_civitai_download_url(download_url)
                 if download_url is None:
                     continue
                 use_auth = download_url.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES)
-                if transfer_backend == "aria2" and download_id:
-                    await self._persist_aria2_state(
-                        download_id,
-                        extra={
-                            "status": self._active_downloads.get(download_id, {}).get(
-                                "status", "downloading"
-                            ),
-                            "save_path": save_path,
-                            "file_path": save_path,
-                            "url": download_url,
-                        },
-                    )
-                success, result = await self._download_model_file(
-                    download_url,
-                    save_path,
-                    backend=transfer_backend,
-                    progress_callback=lambda progress, snapshot=None: (
-                        self._handle_download_progress(
-                            progress,
-                            progress_callback,
-                            snapshot,
+                # One clean retry on the same URL is reserved for a completed
+                # payload whose published SHA256 does not match. Transport
+                # retries and partial resume remain the downloader's job.
+                for hash_attempt in range(2):
+                    if transfer_backend == "aria2" and download_id:
+                        await self._persist_aria2_state(
+                            download_id,
+                            extra={
+                                "status": self._active_downloads.get(download_id, {}).get(
+                                    "status", "downloading"
+                                ),
+                                "save_path": save_path,
+                                "file_path": save_path,
+                                "url": download_url,
+                            },
                         )
-                    ),
-                    use_auth=use_auth,
-                    download_id=download_id,
-                    pause_control=pause_control,
-                )
+                    success, result = await self._download_model_file(
+                        download_url,
+                        save_path,
+                        backend=transfer_backend,
+                        progress_callback=lambda progress, snapshot=None: (
+                            self._handle_download_progress(
+                                progress,
+                                progress_callback,
+                                snapshot,
+                            )
+                        ),
+                        use_auth=use_auth,
+                        download_id=download_id,
+                        pause_control=pause_control,
+                    )
 
-                if success:
+                    if not success:
+                        last_error = result
+                        if transfer_backend == "aria2":
+                            self._reconcile_failed_aria2_partial(save_path)
+                        elif os.path.exists(save_path):
+                            try:
+                                os.remove(save_path)
+                            except Exception as exc:
+                                logger.warning(
+                                    "Failed to remove incomplete file %s: %s",
+                                    save_path,
+                                    exc,
+                                )
+                        break
+
+                    hash_error = await self._verify_downloaded_file_hash(
+                        save_path, getattr(metadata, "sha256", None)
+                    )
+                    if hash_error is None:
+                        download_verified = True
+                        break
+
+                    last_error = hash_error
+                    logger.error(
+                        "Download integrity check failed for %s: %s",
+                        save_path,
+                        hash_error,
+                    )
+                    await self._discard_corrupt_download(save_path)
+                    if hash_attempt == 0:
+                        logger.info(
+                            "Retrying %s from the beginning after SHA256 mismatch",
+                            save_path,
+                        )
+
+                if download_verified:
                     break
 
-                last_error = result
-                if transfer_backend == "aria2":
-                    self._reconcile_failed_aria2_partial(save_path)
-                elif os.path.exists(save_path):
-                    try:
-                        os.remove(save_path)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to remove incomplete file {save_path}: {e}"
-                        )
-            else:
+            if not download_verified:
                 # Clean up files on failure, but preserve .part file for resume
                 cleanup_files = [metadata_path]
                 preview_path_value = getattr(metadata, "preview_url", None)
